@@ -27,7 +27,7 @@ export const PRESET_BLOCKING_SUBSTRINGS = [
 ];
 export const PRESET_MIN_BODY_CHARS = 500;
 
-/** 取硬性不变量清单。保留 preset 形参只为兼容旧调用点（现在只有一个预设）。 */
+/** 取硬性不变量清单（只有一个预设，不需要参数）。 */
 export function presetBlockingSubstrings() {
   return PRESET_BLOCKING_SUBSTRINGS;
 }

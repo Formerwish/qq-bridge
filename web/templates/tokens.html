@@ -1,21 +1,22 @@
 {% extends "base.html" %}
 {% block title %}令牌花费 · qq-bridge 控制台{% endblock %}
 {% block content %}
+{% set field_labels = {'cacheMiss': '缓存未命中', 'cacheHit': '缓存命中', 'cacheWrite': '缓存写入', 'output': '输出', 'reasoning': '推理'} %}
 <section class="panel">
-  <h2>令牌花费 <small>（来自 state/token-usage.jsonl；只统计 token，不折算金额）</small></h2>
+  <h2>令牌花费 <small>（只统计 token，不折算金额）</small></h2>
   {% if not data.ok %}
   <p class="empty">{{ data.reason }}（{{ data.lines }} 行）</p>
   {% else %}
-  <p class="hint">共 {{ data.lines }} 行采样{% if data.bad %}，坏行 {{ data.bad }}{% endif %}；最近采样 {{ data.last_t and (data.last_t / 1000)|int }}</p>
+  <p class="hint">共 {{ data.lines }} 行采样{% if data.bad %}，坏行 {{ data.bad }}{% endif %}；最近采样 {{ data.last_t|fmt_ts }}</p>
   <div class="cards">
     {% for field in fields %}
-    <div class="card stat"><span class="label">{{ field }}</span><strong>{{ '{:,}'.format(data.totals[field]) }}</strong></div>
+    <div class="card stat"><span class="label">{{ field_labels.get(field, field) }}</span><strong>{{ '{:,}'.format(data.totals[field]) }}</strong></div>
     {% endfor %}
   </div>
 
   <h3>按模型</h3>
   <table class="table table-hover align-middle mb-0">
-    <thead><tr><th>模型</th>{% for f in fields %}<th>{{ f }}</th>{% endfor %}<th>合计</th></tr></thead>
+    <thead><tr><th>模型</th>{% for f in fields %}<th>{{ field_labels.get(f, f) }}</th>{% endfor %}<th>合计</th></tr></thead>
     <tbody>
     {% for name, bucket in data.by_model %}
       <tr><td>{{ name }}</td>{% for f in fields %}<td>{{ '{:,}'.format(bucket[f]) }}</td>{% endfor %}<td><b>{{ '{:,}'.format(bucket.values()|sum) }}</b></td></tr>
@@ -25,7 +26,7 @@
 
   <h3>按天（最近 30 天）</h3>
   <table class="table table-hover align-middle mb-0">
-    <thead><tr><th>日期</th>{% for f in fields %}<th>{{ f }}</th>{% endfor %}<th>合计</th></tr></thead>
+    <thead><tr><th>日期</th>{% for f in fields %}<th>{{ field_labels.get(f, f) }}</th>{% endfor %}<th>合计</th></tr></thead>
     <tbody>
     {% for day, bucket in data.by_day %}
       <tr><td>{{ day }}</td>{% for f in fields %}<td>{{ '{:,}'.format(bucket[f]) }}</td>{% endfor %}<td><b>{{ '{:,}'.format(bucket.values()|sum) }}</b></td></tr>

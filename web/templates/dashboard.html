@@ -7,7 +7,7 @@
 
 <section class="cards" id="status-cards">
   {% if status %}
-  <div class="card stat" data-tone="violet"><div class="stat-main"><span class="label">模式</span><strong>{{ status.mode }}</strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg></span></div>
+  <div class="card stat" data-tone="violet"><div class="stat-main"><span class="label">模式</span><strong>{{ status.mode|mode_label }}</strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg></span></div>
   <div class="card stat" data-tone="cyan"><div class="stat-main"><span class="label">DSH</span><strong>{{ '就绪' if status.dshReady else '未就绪' }}</strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
   <div class="card stat" data-tone="green"><div class="stat-main"><span class="label">AI 状态</span><strong class="{{ 'bad' if status.paused else 'good' }}">{{ '已暂停' if status.paused else '运行中' }}</strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 14-4-4 1.4-1.4L11 13.2l4.6-4.6L17 10z"/></svg></span></div>
   <div class="card stat" data-tone="orange"><div class="stat-main"><span class="label">会话</span><strong>{{ status.sessions }}<small>（群 {{ status.groups }} / 私聊 {{ status.privateChats }}）</small></strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span></div>
@@ -51,7 +51,7 @@
     <span class="muted small">按 DeepSeek 官方人民币价估算（元/百万 token）；可在峰谷页「价格」里按时段覆盖。全部范围最多展示 180 天。</span>
   </div>
   {% else %}
-  <p class="empty">该范围没有用量账本记录（state/token-usage.jsonl）。</p>
+  <p class="empty">该范围没有用量记录。</p>
   {% endif %}
 <div class="ubar-tip" id="ubar-tip" hidden></div>
 </section>
@@ -67,7 +67,7 @@
         <td><code>{{ s.key }}</code></td>
         <td>{{ '群聊' if s.kind == 'group' else '私聊' }}</td>
         <td>{{ s.unread }}</td>
-        <td>{{ s.mode or '-' }}{% if s.pendingWake %} · 待唤醒{% endif %}</td>
+        <td>{{ (s.mode|mode_label) if s.mode else '-' }}{% if s.pendingWake %} · 待唤醒{% endif %}</td>
         <td>{{ s.wakeCount }}</td>
         <td class="muted">{{ s.lastAiReplyAt and '有' or '-' }}</td>
       </tr>

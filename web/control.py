@@ -36,9 +36,9 @@ def _request(path: str, method: str = "GET", body: dict | None = None, timeout: 
             detail = exc.read().decode("utf-8", "ignore")[:200]
         except Exception:
             pass
-        raise BridgeError(f"桥接返回 {exc.code}：{detail or exc.reason}") from exc
+        raise BridgeError(f"操作未完成：{detail or '服务暂时不可用'}") from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise BridgeError(f"桥接不可达（{settings.bridge_url}）：{exc}") from exc
+        raise BridgeError("无法连接管理服务，请确认服务正在运行") from exc
 
 
 def status() -> dict:

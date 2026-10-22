@@ -82,16 +82,16 @@ const BRIDGE_LOG = path.join(STATE_DIR, 'bridge.log');
 /**
  * 模式拼写的**唯一**归一入口（输入边界）。
  *
- * `simulation` 是规范名（QSH_PLAN.md §2.1：对用户只暴露 `closed-agent` / `simulation`），
- * `chat` / `reserved` / `reserved2` 是历史拼写 —— 必须继续被**接受**（线上桥接持久化的全局值
- * 就是 `reserved2`），但进程内部一律用历史拼写存储与比较：`currentMode === 'reserved2'` 这类
- * 判断遍布发送闸门、定时器与 preset 解析，把规范名直接塞进 `currentMode` 会让它们全部变成假。
+ * `simulation` 是规范名（对用户只暴露 `closed-agent` / `simulation`），`chat` / `reserved` /
+ * `reserved2` 是兼容拼写 —— 必须继续被**接受**（持久化的全局值就是 `reserved2`），
+ * 但进程内部一律用这些兼容拼写存储与比较：`currentMode === 'reserved2'` 这类判断遍布
+ * 发送闸门、定时器与 preset 解析，把规范名直接塞进 `currentMode` 会让它们全部变成假。
  *
- * 旧写法是 `VALID_MODES = ['chat','closed-agent','reserved','reserved2']`，控制台那处还抄了
- * 一份同样的字面量数组。后果是：在 DSH 设置或 `state/mode.json` 里写 `simulation` 会被**静默
- * 忽略**，`currentMode` 保持上一次的值（进程刚起来时是 `chat`，即文本转发模式 —— preset 与
- * `v2ToolEnabled` 之类的闸门都与仿真模式不同）。用户以为切到了仿真，实际跑的是另一套，
- * 而且没有任何日志。规范名与历史名必须在这里收敛成同一个内部值。
+ * 校验必须走这张别名表：只比对 `['chat','closed-agent','reserved','reserved2']` 的话，
+ * 在 DSH 设置或 `state/mode.json` 里写 `simulation` 会被**静默忽略**，`currentMode` 保持
+ * 上一次的值（进程刚起来时是 `chat`，即文本转发模式 —— preset 与 `v2ToolEnabled` 之类的
+ * 闸门都与仿真模式不同）。用户以为切到了仿真，实际跑的是另一套，而且没有任何日志。
+ * 规范名与兼容名必须在这里收敛成同一个内部值。
  */
 const MODE_INPUT_ALIASES = Object.freeze({
   chat: 'chat',
@@ -113,12 +113,11 @@ function normalizeModeInput(value) {
 /**
  * 从 DSH `settings.describe` 的一个命名空间里读某个键，**user 层优先、value 回退**。
  *
- * 为什么不能只读 `value`：DSH 0.2.0-rc.2 的 `settings/update` 写入的是 user 层
- * （profile patch 的显式 config），当次进程内 `describe().value`（取自插件 fiber 的
- * 运行配置）**不会更新**，要重启 DSH 才变。控制台切模式后 5 秒一次的 `refreshMode()`
- * 会读回旧 `value`，把刚选的模式改回去（issue #22，实测复现）。
- * 写哪读哪：`user` 里有显式值就用它，否则回退 `value`（从没写过时 `user` 是空对象，
- * 老行为不变；DSH 以后修好热更新也继续正确）。
+ * 为什么不能只读 `value`：`settings/update` 写入的是 user 层（profile patch 的显式 config），
+ * 当次进程内 `describe().value`（取自插件 fiber 的运行配置）**不会更新**，要重启 DSH 才变。
+ * 控制台切模式后 5 秒一次的 `refreshMode()` 会读回旧 `value`，把刚选的模式改回去。
+ * 写哪读哪：`user` 里有显式值就用它，否则回退 `value`（从没写过时 `user` 是空对象）；
+ * DSH 以后修好热更新也继续正确。
  */
 function settingFromDshNamespace(ns, key) {
   if (!ns || typeof ns !== 'object') return undefined;
@@ -230,17 +229,16 @@ function loadOrCreateConsoleToken() {
  * 这台机器的用户都能读走控制台令牌、Snowluma accessToken、各会话 agentToken 和全部 QQ 聊天记录。
  * 这里用 icacls 切断 state/ 的继承链，只保留「当前用户 + SYSTEM + Administrators」。
  *
- * ⚠️ 具体实现已抽到 `src/state-acl.mjs`（与 scripts/harden-state-acl.mjs 共用同一份）。
- * 这里原本自带一份**会破坏数据**的实现：
- *   · `icacls DIR /inheritance:r /grant:r "u:(OI)(CI)F" /T` —— (OI)(CI) 是目录专用标志，
+ * ⚠️ 具体实现抽到 `src/state-acl.mjs`（与 scripts/harden-state-acl.mjs 共用同一份）：
+ * 两处各写一份必然漂移，而这段逻辑一旦写错就会**破坏数据** ——
+ *   · `icacls DIR /inheritance:r /grant:r "u:(OI)(CI)F" /T` 里的 (OI)(CI) 是目录专用标志，
  *     套到 /T 展开的文件上会失败，而 /inheritance:r 已摘掉文件的继承 ACE，净结果是
  *     **子文件 DACL 被清空、连属主都读不了**（实测 state/ 下 50 个文件变空，桥接读不到
  *     自己的控制台令牌）；启动日志只报「未能收紧」，看不出已经造成破坏。
- *   · 回读自检用 `/\(I\)/` 扫全文，而 DSH 沙箱的 Low 完整性标签行永远带 (I) ——
- *     于是「已收紧」被误判成「未收紧」，**每次启动都重跑一遍那个破坏性命令**。
- * 两处逻辑各写一份正是漂移的根源，故合并。失败时不能只说"可能可读"就完事，
- * 要给出一条**安全**的可复制命令，并把结果回报到控制台（/api/security 的 stateDirHardened）。
- * 宁可明确报"没做成"，也不要假装已经安全。
+ *   · 回读自检不能只用 `/\(I\)/` 扫全文：DSH 沙箱的 Low 完整性标签行永远带 (I)，
+ *     于是「已收紧」会被误判成「未收紧」，**每次启动都重跑一遍那个破坏性命令**。
+ * 失败时不能只说"可能可读"就完事：要给出一条**安全**的可复制命令，并把结果回报到控制台
+ * （/api/security 的 stateDirHardened）。宁可明确报"没做成"，也不要假装已经安全。
  */
 function hardenStateDirAcl() {
   const result = hardenDir(STATE_DIR);
@@ -286,7 +284,7 @@ const ROLES_DIR = path.join(ROOT, 'roles');
 const ROLE_NAME_MAX = 40;
 const ROLE_CONTENT_MAX_BYTES = 64 * 1024;
 // 注入上限：**按模式筛完小节之后**再截断，避免另一模式的专属内容白白占掉预算。
-// 默认 6000（沿用历史值，是每条约 4~6k token 的成本护栏），可用 config.json 的
+// 默认 6000（每条约 4~6k token 的成本护栏），可用 config.json 的
 // role.maxInjectChars 调整（1000~20000）；启动时由 applyRoleInjectLimit() 写入。
 const ROLE_INJECT_MAX_CHARS_DEFAULT = 6000;
 let roleInjectMaxChars = ROLE_INJECT_MAX_CHARS_DEFAULT;
@@ -433,12 +431,11 @@ function installedPresetYaml(name) {
   return path.join(dshHomeDir(), '.agent-presets', name, 'agent.cordis.yml');
 }
 
-// 这里**没有**模块级的 resolvePresetName —— 曾经有一个，但它被 main() 内部同名函数完全遮蔽
-// （函数声明提升到 main 作用域，main 里所有调用点都落到内部那个），是纯死代码。
-// 而且它的语义是错的：未知名字静默回退到 qq-chat-v2，等于 fail-OPEN —— 一旦哪天有人把它
-// "复活"成真正生效的实现，群聊会话就会在 preset 清单校验失败时照样建起来。
-// 真正在用的那个（main() 内，带 strict 开关）在名字不可用时返回 '' 让调用方拒绝建会话。
-// 同理不再保留 PRESET_NAME_SET：它只服务于那个死函数，留着只会诱惑下一个人去用它。
+// 这里**不要**放模块级的 resolvePresetName：它会被 main() 内的同名函数遮蔽
+// （函数声明提升到 main 作用域，main 里所有调用点都落到内部那个），等于死代码。
+// 而且那种语义是错的：未知名字静默回退到 qq-chat-v2，等于 fail-OPEN —— 群聊会话会在
+// preset 清单校验失败时照样建起来。真正在用的那个（main() 内，带 strict 开关）在名字
+// 不可用时返回 '' 让调用方拒绝建会话；PRESET_NAME_SET 同理不要恢复（它只服务于死函数）。
 
 function readPresetPromptText(name) {
   const file = presetSourceYaml(name);
@@ -654,7 +651,7 @@ function normalizeIdList(value) {
 function loadConfig() {
   const p = configPath();
   const { data: file } = loadConfigDocument(p);
-  // 过渡期：把 TOML 同步成 JSON 镜像，供尚未迁移的脚本读取（P6 删除）。
+  // 把 config.toml 同步成 JSON 镜像，供只读 JSON 的脚本读取。
   try { if (p.endsWith('.toml')) syncConfigMirror(); } catch {}
   if (!file || typeof file !== 'object' || Array.isArray(file)) throw new Error(`配置格式错误：${p}`);
   const cfg = {
@@ -662,10 +659,10 @@ function loadConfig() {
       baseUrl: 'http://127.0.0.1:3080',
       provider: 'deepseek-official',
       // 多模态模型：DeepSeek-V41-Flash（DSH 模型目录里 inputModalities 含 image）。
-      // 旧默认 deepseek-v4-flash-vision-exp 已被取代；config.json 未配置时用此兜底。
+      // 默认模型；config.json 未配置时用此兜底。
       model: 'deepseek-flash',
       reasoningEffort: 'max',
-      // 兼容新版 DSH 的 API 鉴权：如果 DSH 升级后要求非浏览器客户端带 token，
+      // 兼容 DSH 的 API 鉴权：如果 DSH 要求非浏览器客户端带 token，
       // 在这里配置 token；默认走 Authorization: Bearer <token>。
       authToken: '',
       authHeader: 'authorization',
@@ -984,7 +981,7 @@ function loadConfig() {
       : 2000;
   }
 
-  // DSH 0.1.7 起 launch token 是**每进程现生成的 32 字节随机数，只存在内存里**，
+  // DSH 的 launch token 是**每进程现生成的 32 字节随机数，只存在内存里**，
   // 不落盘、不可推导；只有启动器把 `dsh web` 的 stdout 重定向到文件时才能从日志读到。
   // 所以这里发现的 token 只是兜底，主路径是客户端用 ~/.dsh 里持久化的签名密钥
   // 离线铸造会话 Cookie（见 dsh-client 的 mintBrowserSessionCookie）。
@@ -1004,7 +1001,7 @@ function loadConfig() {
   // 峰谷时段：归一化一次，非法段直接丢弃（避免一条坏配置让所有覆盖失效）。
   cfg.periods = normalizePeriods(cfg.periods);
 
-  // 人格卡注入上限（字符）。历史硬编码 6000，现在可配：每条约 4~6k token 的成本护栏。
+  // 人格卡注入上限（字符）。可配：每条约 4~6k token 的成本护栏。
   cfg.role = { maxInjectChars: ROLE_INJECT_MAX_CHARS_DEFAULT, ...(file.role ?? {}) };
   roleInjectMaxChars = applyRoleInjectLimit(cfg.role.maxInjectChars);
   if (roleInjectMaxChars !== cfg.role.maxInjectChars) {
@@ -1119,7 +1116,7 @@ function acquireLock() {
     }
   };
   if (tryCreate()) return;
-  // 锁文件已存在：检查 PID 是否仍存活；内容为空视为过期锁（仅兼容旧版本遗留），删除后重试一次。
+  // 锁文件已存在：检查 PID 是否仍存活；内容为空视为过期锁（异常退出可能留下空文件），删除后重试一次。
   let stale = false;
   try {
     const content = fs.readFileSync(LOCK_FILE, 'utf8').trim();
@@ -1140,10 +1137,10 @@ function acquireLock() {
             stale = true;
           } else if (error.code === 'EPERM') {
             // EPERM = 该 PID 属于受保护/系统进程（权限不足，无法发信号）。
-            // 这**不能**证明桥接还在跑，但旧逻辑把它当成「已有实例」直接 exit(2)：
-            // 一旦锁文件里的 PID 被系统回收给一个受保护进程，桥接就永久起不来，
-            // 而且提示信息把人引向「已有实例在运行」这个错误方向。
-            // 这里改成按「疑似过期」处理，但要先确认控制台端口没有被占用。
+            // 这**不能**证明桥接还在跑：一旦锁文件里的 PID 被系统回收给一个受保护进程，
+            // 把它当成「已有实例」直接 exit(2) 会让桥接永久起不来，而且提示信息把人引向
+            // 「已有实例在运行」这个错误方向。
+            // 因此按「疑似过期」处理，但要先确认控制台端口没有被占用。
             if (consolePortInUse()) {
               console.error(`[bridge] 控制台端口已被占用，判定已有实例在运行（锁文件 PID ${pid} 无权限探测）。`);
               process.exit(2);
@@ -1189,7 +1186,7 @@ const LOG_LINE_MAX = 1000;
  * 为什么不能「append 之后再读回整个文件数行数」：那样每写一行都要同步读一遍整个文件，
  * 到上限后还要整文件重写一次。实测 bridge.log 到了 2000 行（约 200KB）时，
  * 单次 log() 要 17ms 左右，而每条 QQ 消息会打 2~4 条日志 —— 每条消息白扔几十毫秒的
- * 事件循环。这里改成**内存计数器**：只在启动时数一次，之后 O(1) 追加，
+ * 事件循环。这里用**内存计数器**：只在启动时数一次，之后 O(1) 追加，
  * 到上限才轮转，轮转用 rename 到 `.1`（不是整文件重写，也不会写坏）。
  */
 function createCappedLogger(file, maxLines) {
@@ -1248,8 +1245,8 @@ function log(...args) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const convKey = (kind, id) => `${kind}:${id}`;
 const SEND_TIMEOUT_MS = 15000;
-// DSH 控制类调用（停任务/归档会话）的超时。这些 await 以前是裸的：DSH 接受了连接但
-// 不返回响应时，HTTP handler 永不返回，控制台与群消息一起失去响应（issue #32）。
+// DSH 控制类调用（停任务/归档会话）的超时。这些 await 必须带超时：DSH 接受了连接但
+// 不返回响应时，HTTP handler 永不返回，控制台与群消息一起失去响应。
 // 超时后走各自的 catch 记日志，最坏情况只是「这一次重置没做成」，而不是整体挂死。
 const DSH_CONTROL_TIMEOUT_MS = 15000;
 function withTimeout(promise, ms, label) {
@@ -1308,11 +1305,10 @@ async function segmentsToText(segments, options = {}) {
         break;
       }
       case 'json': out.push('[卡片消息]'); break;
-      // markdown：SnowLuma 1.14.9 的线上段落是 `{type:'markdown',data:{content}}`。
-      // 上游 1.14.17+（commit 1934e4e7「include text alongside received markdown」）
-      // 起还会带上 `data.text`。两个形状都读，这样将来升级 SnowLuma 运行时不会退化成
-      // 字面量 `[markdown]` 被喂给模型。SDK 的 KnownMessageSegment 联合里没有 markdown，
-      // 所以段类型是运行时多出来的 —— 这正是 default 分支原来会命中的情况。
+      // markdown：线上段落可能是 `{type:'markdown',data:{content}}`，也可能带 `data.text`。
+      // 两个形状都读，否则会退化成字面量 `[markdown]` 被喂给模型。SDK 的
+      // KnownMessageSegment 联合里没有 markdown，所以段类型是运行时多出来的 ——
+      // 不显式处理就会落到 default 分支。
       case 'markdown': out.push(String(d.text ?? d.content ?? '[Markdown]')); break;
       case 'forward': {
         const fid = forwardIdFromData(d);
@@ -1339,7 +1335,7 @@ function sanitizeMediaSummary(value, max = 60) {
 //
 // 字段必须尽量保留：SnowLuma 收到的 QQ 表情包（收藏/市场表情）是 **image 段 +
 // emoji_id/emoji_package_id/key/url**（实测：sub_type 可能是 0，靠 emoji_id 区分），
-// 部分网关实现则用 mface 段。以前只留 file/url/subType/summary，emoji 字段被丢掉，
+// 部分网关实现则用 mface 段。只留 file/url/subType/summary 会丢掉 emoji 字段，
 // 一旦 get_image 取不到（市场表情不在网关缓存里），就再也没有其它可用的兜底地址。
 function extractMediaFromSegments(segments) {
   const media = [];
@@ -1435,7 +1431,7 @@ async function main() {
   // ── 黑话库存进 MySQL（kb_slang）：DB 是权威存储，state/slang.json 退化成镜像 ──
   // 为什么：管理端（E:\qq-kb-admin）要能查看学习候选、确认/拒绝、直接改词条。
   // 如果只留 JSON，后台改的东西桥接看不见。现在的做法是：
-  //   1) 启动时从库加载；库空而本地有数据 → 一次性导入（首次上线的迁移就这么发生）；
+  //   1) 启动时从库加载；库空而本地有数据 → 一次性导入；
   //   2) 本地每次 saveSlangStore() 之后异步对账写库（debounce 400ms）；
   //   3) 每 60 秒从库拉一次「更新更晚」的条目（管理端改的），删掉的也同步移除。
   // 冲突判定只用 updated_ms：谁改得晚听谁的，避免两边互相覆盖。
@@ -1468,7 +1464,7 @@ async function main() {
   function queueSlangDbSync(delay = 400) {
     if (!slangDbReady) return;
     const now = Date.now();
-    // 只保护「最近改过」的条目：这样后台删掉的旧条目仍能在下一轮对账里被删除。
+    // 只保护「最近改过」的条目：后台删掉的条目仍能在下一轮对账里被删除。
     for (const entry of slangEntries) {
       if ((Date.parse(entry.updatedAt) || 0) > now - 120000) slangProtected.set(entry.id, now);
     }
@@ -1628,7 +1624,7 @@ async function main() {
   // ── 语音发送（把准备好的音频当 QQ 语音条发出） ──────────────────────────────
   //
   // 链路：本地音频文件 → SnowLuma 的 record 段 → 网关自带 SILK 编码 → QQ 语音条。
-  // 网关侧事实（v1.14.9 源码确认）：record 段的 file 接受本地路径 / file:// / http(s):// / base64://，
+  // 网关侧事实（按 SnowLuma 源码确认）：record 段的 file 接受本地路径 / file:// / http(s):// / base64://，
   // 非 SILK 的音频由网关的 native ffmpeg addon 自动转成 NT SILK，所以这里不做预转码。
   //
   // 两条通道，闸门不同（与 /api/send/* 的既有分层一致）：
@@ -1684,11 +1680,10 @@ async function main() {
    *
    * 安全边界：**AI 只能从语音库目录里取文件**（防 prompt injection 拿任意本地文件当语音外发）。
    *
-   * 历史坑（已修）：这里曾经在 `socialV2.voice.allowAbsolutePath: true` 时直接把 AI 给的
-   * 绝对路径交给 resolveAudioSource 解析，于是「AI 传 C:\Users\x\Music\任意.mp3」
+   * 即使 `socialV2.voice.allowAbsolutePath: true`，绝对路径也**必须落在语音库目录之内**：
+   * 直接把 AI 给的绝对路径交给 resolveAudioSource 解析的话，「AI 传 C:\Users\x\Music\任意.mp3」
    * 就能把本机任意音频（< 20 MB）发到群里 —— 而 inspectAudio 对「没有音频流」或
    * ffprobe 不可用的情况是放行的，等于把开关变成了任意文件外发通道。
-   * 现在即使开了这个开关，也要求绝对路径**必须落在语音库目录之内**；
    * 真要从库外发文件请走操作者通道（resolveVoicePathForOperator / CLI）。
    */
   function voicePathInsideLibrary(vc, absPath) {
@@ -2543,8 +2538,8 @@ async function main() {
     log('⚠️  未配置 ownerQQ：审批/管理命令/封闭 agent 模式将全部不可用。请在 config.json 或控制台「访问与安全」页填写管理员 QQ');
   }
   if (cfg.socialV2?.voice?.allowAbsolutePath === true) {
-    // 该开关曾经允许 AI 发送语音库之外的任意本机音频文件（prompt injection 可用来外发文件）。
-    // 现在无论开关如何，AI 通道都只接受语音库内的文件；这里提示它已经不再放宽边界。
+    // 该开关不放宽 AI 通道：无论开关如何，AI 都只能发语音库内的文件（库外文件是 prompt
+    // injection 的外发通道）；这里提示操作者该开关对 AI 通道不起作用。
     log('ℹ️  socialV2.voice.allowAbsolutePath=true 已不再放宽 AI 通道：AI 发的语音始终只允许来自语音库（库外文件请用语音工具/CLI 发送）');
   }
 
@@ -2558,11 +2553,11 @@ async function main() {
     // 默认只允许把 launch token 交给回环地址；远程 DSH 需要显式 opt-in（见 dsh-client.ensureAuth）。
     allowRemote: cfg.dsh.allowRemote === true
   });
-  // DSH 的模型目录 RPC：0.1.5 是 `session/modelCatalog`。**不能走基类门面**
+  // DSH 的模型目录 RPC 是 `session/modelCatalog`。**不能走基类门面**
   // `api.sessions.modelCatalog` —— 桥接钉住的 `@deepseek-ai/dsh-host-apiproxy@0.1.1-rc.2`
   // 的 sessions 门面里根本没有这个方法（只有 `models` → 已下线的 `session/models`），
   // 调用会抛 “api.sessions.modelCatalog is not a function”，让思考强度档位静默退回内置清单。
-  // 这里直接用桥接自己覆写的 callUnary（它本来就是为「不依赖旧版客户端域方法」而存在的），
+  // 这里直接用桥接自己覆写的 callUnary（它本来就是为「不依赖基类客户端域方法」而存在的），
   // 并保留一次 `session/models` 回落以兼容更老的 DSH。
   const modelCatalogErrorLogged = new Set();
   async function fetchModelCatalog() {
@@ -2592,7 +2587,7 @@ async function main() {
   const ACTIVE_WAIT_LEASE_MS = 15 * 60 * 1000;
   /**
    * 回合判忙租约：只要 `turn/start` 的结束信号（turn/end）丢了，会话就会**永久**判忙，
-   * 之后所有唤醒只进 pendingWakeReasons、QQ 上表现为「它不理我了」，只能重启（issue #11/#23/#26/#19）。
+   * 之后所有唤醒只进 pendingWakeReasons、QQ 上表现为「它不理我了」，只能重启。
    * 正常回合 1~3 分钟，最长工具调用（DSH 的 toolCallTimeoutMs）≈12 分钟，15 分钟足以覆盖任何
    * **还活着**的回合。过期只是不再判忙：collector 本身保留，真回复照常 flush，只是允许新唤醒排队。
    */
@@ -2604,7 +2599,7 @@ async function main() {
   const wakeConfigMissCount = new Map();
   const reverse = new Map(); // sessionId -> conv key
   for (const [key, sessionId] of Object.entries(state.sessions)) reverse.set(sessionId, key);
-  // 新版 DSH 事件流需要显式 follow；启动时为已持久化的 QQ 会话补上。
+  // 事件流需要显式 follow；启动时为已持久化的 QQ 会话补上。
   for (const sessionId of Object.values(state.sessions)) api.events.follow(sessionId);
   const sessionPromises = new Map(); // key -> create promise（防并发重复创建）
   const promptQueues = new Map(); // key -> { queue: [], running: false }：每个 QQ 会话串行投递 DSH prompt，保证 turn 顺序
@@ -2712,8 +2707,8 @@ async function main() {
     }
     if (!restored) return;
     collectors.set(sessionId, collector);
-    // 恢复出来的回合也必须带起始时间，否则租约对它无从生效 —— 这正是
-    // 「DSH 重启后忙标记永不复位」的那条路径（issue #19）。不知道真实起点时按现在算：
+    // 恢复出来的回合也必须带起始时间，否则租约对它无从生效 —— 那会走成
+    // 「DSH 重启后忙标记永不复位」。不知道真实起点时按现在算：
     // 活着的回合会在 turn/end 清掉；真丢了的回合最多再忙一个租约期就自动解除。
     if (!v2TurnStartAt.has(sessionId)) v2TurnStartAt.set(sessionId, Date.now());
     log(`重连后恢复了进行中的回合（${sessionId}，turn ${[...open].join(',')}）`);
@@ -2749,11 +2744,11 @@ async function main() {
   let currentMode = 'chat'; // chat | closed-agent | reserved（仿真模式，由 DSH settings / state/mode.json 驱动）
   let lastMode = currentMode;
   // closed-agent 模式使用的 DSH agent preset：留空表示「用 DSH 自己声明的默认 preset」。
-  // 旧版本这里硬编码 'router-standard'，但 DSH 0.1.5 已移除该 preset，硬编码会导致
-  // 创建出的会话挂不上 preset，进而被 DSH 套上 standard（含本地工具）。
+  // **不要硬编码**具体 preset 名：名字在 DSH 里被移除后，创建出的会话会挂不上 preset，
+  // 进而被 DSH 套上 standard（含本地工具）。
   let closedAgentPreset = '';
-  // DSH 侧真实的 preset 清单与默认 preset：旧版本这里是硬编码的 'router-standard'，
-  // 但 DSH 0.1.5 已不存在该 preset，硬编码会让 closed-agent 模式永远挂不上 preset。
+  // DSH 侧真实的 preset 清单与默认 preset：必须从 DSH 读取，硬编码会让 closed-agent
+  // 模式永远挂不上 preset。
   let dshPresetIds = [];        // 当前 DSH 可用的 preset id 列表（agentPresets/list）
   let dshDefaultPreset = '';    // DSH settings `agent-presets.default`，取不到时用列表里的 isDefault
   const queued = new Map(); // key -> { promptText }[]
@@ -2790,8 +2785,8 @@ async function main() {
       }
       const ns = s.namespaces.find((n) => n.ns === 'qq-mode');
       // 规范化后再比较：`simulation` 也走这里（见 MODE_INPUT_ALIASES）。
-      // 读取必须 user 层优先：DSH 0.2.0-rc.2 写完 settings 后同进程内 value 不更新，
-      // 只读 value 会让控制台切的模式被 5 秒轮询改回去（issue #22）。
+      // 读取必须 user 层优先：写完 settings 后同进程内 value 不更新，
+      // 只读 value 会让控制台切的模式被 5 秒轮询改回去。
       const fromDsh = normalizeModeInput(settingFromDshNamespace(ns, 'mode'));
       if (fromDsh) {
         currentMode = fromDsh;
@@ -3003,8 +2998,8 @@ async function main() {
   let flushQueueAgain = false;
   const flushQueue = async () => {
     // 尾沿重跑：单飞锁只是「别并发跑」，不能把后来的请求直接丢掉。
-    // 旧写法在 flush 正在 await 时（一次失败可能卡上 60 秒）把重试定时器的调用直接 return，
-    // 于是**再也没有人重新排一次 flush**，队列里的消息会一直躺到下次收到新消息为止。
+    // flush 正在 await 时（一次失败可能卡上 60 秒）若把重试定时器的调用直接 return，
+    // 就**再也没有人重新排一次 flush**，队列里的消息会一直躺到下次收到新消息为止。
     if (flushingQueue) { flushQueueAgain = true; return; }
     flushingQueue = true;
     try {
@@ -3140,7 +3135,7 @@ async function main() {
   // 没有 .dll/.node/FFI/进程注入），也不启动、不控制 SnowLuma 与 QQ。它能做、也应该做的
   // 是**把这个失败变得可诊断**。
   //
-  // 信号从哪来（**两处都实测核对过 SnowLuma 1.14.9 的运行时源码，别凭直觉改**）：
+  // 信号从哪来（**实测核对过 SnowLuma 的运行时源码，别凭直觉改**）：
   //
   //   ① **心跳载荷里的 `status.good`** —— 权威信号，且是免费的。
   //      SnowLuma 每 30s 由**自己的定时器无条件**发一个 heartbeat
@@ -3154,11 +3149,11 @@ async function main() {
   //   ② `get_status` 的 `good`/`online` —— 与 ① 同源，用于①长期收不到时的兜底轮询。
   //      ⚠️ **不要用 `get_login_info` 取 good**：它只返回 `{ user_id, nickname }`。
   //      取错字段不会报错（SDK 只校验 status/retcode 信封，不校验 data 载荷），
-  //      good 会永远停在 null —— 本文件第一版就是这么写的，等于权威信号整条是死代码。
+  //      good 会永远停在 null，等于权威信号整条是死代码。
   //      `src/mcp-snowluma-safe.js` 的 snowluma_status 工具是对的取法（get_login_info
   //      拿昵称 + get_status 拿 online/good），可对照。
   //
-  //   ③ `bot_status`（账号会话上下线）—— SnowLuma 1.14.17 起才有，老运行时永不触发，
+  //   ③ `bot_status`（账号会话上下线）—— 只有较新的 SnowLuma 版本才有，老运行时永不触发，
   //      所以只是加分项，不能作为唯一依据。
   //
   //   ④ 「距最近一个事件包的时长」—— 只能证明**SnowLuma 进程与 WS 链路还活着**，
@@ -3296,7 +3291,7 @@ async function main() {
   function startConsoleServer() {
     const port = cfg.consolePort ?? 3100;
     const listenHost = cfg.consoleListenHost || '127.0.0.1';
-    // 控制台鉴权：优先用 config.consoleToken，未配置则自动生成并持久化，不再默认无鉴权。
+    // 控制台鉴权：优先用 config.consoleToken，未配置则自动生成并持久化（不提供无鉴权模式）。
     // 使用 let 以便控制台内手动修改令牌后热更新。
     const configuredToken = String(cfg.consoleToken ?? '').trim();
     const tokenValid = configuredToken.length >= 16 && configuredToken.length <= 128 && /^[A-Za-z0-9_-]+$/.test(configuredToken);
@@ -3305,7 +3300,7 @@ async function main() {
     // 注释写着"启动时已自动生成并持久化"—— 等于承认那一行不可达，可它是一条**失败开放**的分支：
     // 一旦真的空了（写盘异常被吞、以后新增"关闭鉴权"之类的配置），控制台上那些
     // 改配置 / 发消息 / 读聊天记录的接口会变成完全免鉴权，而 Host 白名单只挡跨机访问、
-    // 挡不住本机进程。这里改成失败关闭：宁可启动时报错，也不要静默开着一个无鉴权的管理 API。
+    // 挡不住本机进程。这里失败关闭：宁可启动时报错，也不要静默开着一个无鉴权的管理 API。
     if (!consoleToken) throw new Error('控制台令牌为空：拒绝以无鉴权方式启动控制台 API');
     if (!tokenValid && configuredToken) log(`控制台 config.consoleToken 长度/字符不合法，已忽略并回退到自动生成令牌`);
     if (!configuredToken) log(`控制台未配置 consoleToken，已自动生成：${String(consoleToken).slice(0, 6)}…（完整值保存在 state/console-token）`);
@@ -3416,8 +3411,8 @@ async function main() {
         req.on('aborted', () => fail(400, '请求体读取中断'));
       });
       // 浏览器会自动请求 /favicon.ico，且**不带控制台令牌**。若让它落到下面的鉴权分支，
-      // 每次打开控制台都会在 DevTools 里留一条 401 噪音（离线预览 fixture 早已用 204 处理，
-      // 真实服务端此前与自己的 fixture 行为不一致）。这里在任何鉴权之前直接 204 收掉。
+      // 每次打开控制台都会在 DevTools 里留一条 401 噪音（离线预览 fixture 也是 204 处理，
+      // 两边行为必须一致）。这里在任何鉴权之前直接 204 收掉。
       if (req.method === 'GET' && (url.pathname === '/favicon.ico' || url.pathname === '/apple-touch-icon.png')) {
         res.writeHead(204, SECURITY_HEADERS);
         res.end();
@@ -3929,8 +3924,7 @@ async function main() {
       // 背景：控制台令牌是「管理端全权」，会话令牌是「只能动自己这个会话」。MCP 工具进程
       // 两者都持有，所以「这次请求到底是智能体发的还是管理端发的」必须由请求自己声明。
       // 各端点用 `if (x-agent-token && !agentTokenOk(...))` 做会话绑定校验，但那个写法在
-      // **头缺失时整条跳过** —— 而头缺失恰恰是模型没传 token 时的自然结果
-      // （旧版 mcp-snowluma-safe.js 用 `...(token ? {...} : {})` 直接省略了这个头）。
+      // **头缺失时整条跳过** —— 而头缺失恰恰是模型没传 token 时的自然结果。
       // 于是「漏传令牌」不是被拒绝，而是**升级成控制台全权**：典型的 confused deputy。
       //
       // 现在 MCP 端一律带上 x-agent-call: 1；带了令牌就必须命中某个活跃会话，
@@ -4018,7 +4012,7 @@ async function main() {
           return;
         }
         // agent token 默认拒绝：MCP 的 v2 工具同时携带 x-console-token 与 x-agent-token，
-        // 因此仅靠控制台令牌挡不住 AI。这里改成白名单：只有 AI 真正需要的面放行，
+        // 因此仅靠控制台令牌挡不住 AI。这里用白名单：只有 AI 真正需要的面放行，
         // 其余（人格/提示词/思考强度/白名单/重启…）一律 403——避免以后新增管理端点时忘记拉黑。
         if (req.headers['x-agent-token']) {
           const agentAllowed = url.pathname === '/api/status'
@@ -4054,7 +4048,7 @@ async function main() {
           }
         }
           if (req.method === 'GET' && url.pathname === '/') {
-          // 旧单文件控制台已下线：管理界面统一走 Flask 控制台（config.toml 的 [web] 段）。
+          // 管理界面统一走 Flask 控制台（config.toml 的 [web] 段）。
           const webPort = Number(cfg.web?.port) || 3211;
           const webUrl = `http://127.0.0.1:${webPort}/`;
           res.writeHead(302, { location: webUrl, ...SECURITY_HEADERS });
@@ -4378,7 +4372,7 @@ async function main() {
             const restored = fs.readFileSync(backupPath, 'utf8');
             const restoredPrefix = extractPresetPrefix(restored);
             if (restoredPrefix === null) { sendJson({ ok: false, error: '备份内容不是有效的预设文件' }, 400); return; }
-            // 还原路径必须与保存路径同样严格：旧备份可能来自安全基线加入之前，
+            // 还原路径必须与保存路径同样严格：备份可能早于当前的安全基线，
             // 直接还原会把弱化版提示词（缺「你没有本地工具」等不变量）写回去。
             // 不变量清单是预设契约的一部分（见 src/preset-prompt.js）。
             const blockers = presetPromptBlockers(restoredPrefix, 'v2');
@@ -4952,7 +4946,7 @@ async function main() {
           const file = loadConfigDocument().data;
           // current 必须是「当前**生效**的 socialV2」，而不是文件里恰好写着的那一份。
           //
-          // config.json 里没有 socialV2 段（或该段不是普通对象）时，旧写法 current={} 会让下面所有
+          // config.json 里没有 socialV2 段（或该段不是普通对象）时，current={} 会让下面所有
           // `current.xxx ?? 默认` 的兜底全部落空，并把只剩本次提交字段的段落盘。最危险的一处是工具开关
           // 归一化：`typeof merged.tools[k] !== 'boolean'` 时写的是 `current.tools?.[k] !== false` ——
           // current 为空 → undefined !== false → true，于是**一次控制台保存就把默认关闭的
@@ -5250,7 +5244,7 @@ async function main() {
             ok: true,
             key,
             time: new Date().toISOString(),
-            // 机器人自己的身份：agent 需要它才能把「@樰」对到自己身上（issue #29）。
+            // 机器人自己的身份：agent 需要它才能把「@樰」对到自己身上。
             self: {
               nickname: selfDisplayName || null,
               userId: selfUserId || null,
@@ -5342,7 +5336,7 @@ async function main() {
           if (req.headers['x-agent-token'] && !v2ToolEnabled('markRead')) { sendJson({ ok: false, error: '工具未启用：qq_mark_read' }, 403); return; }
           const st = getSocialV2State(key);
           // 注意：不带 throughSeq 的调用会清空全部未读，这是**有意保留的兼容语义**
-          // （旧 preset 与「没有水位」的收尾调用；见 acknowledgeMessagesV2 的注释与
+          // （没有水位的收尾调用依赖它；见 acknowledgeMessagesV2 的注释与
           // test-token-economy 的 legacy 用例）。当前 preset 会明确要求带上 readThroughSeq 水位。
           const throughSeq = requestedReadThroughSeqV2(st, body, !!req.headers['x-agent-token']);
           // 如果当前已经是“潜水”唤醒配置，且最近还有对话/刚被唤醒，不允许用 mark_read 直接回到潜水；
@@ -5783,9 +5777,9 @@ async function main() {
             : (isRawString ? [String(rawMessages).trim()].filter(Boolean) : []);
           const replyToMessageId = body.replyToMessageId;
           const atUserId = body.atUserId ?? null;
-          // 仿真模式不再按空格自动分条：字符串就是一条消息，数组模式原样使用调用方间隔。
-          // 旧写法是 `(isRawString && messages.length > 1) ? 'auto' : ...` —— 上面 messages 的构造
-          // 保证 isRawString 为真时 length 恒为 1，这个分支永远不可达，留着只会让人以为
+          // 仿真模式不按空格自动分条：字符串就是一条消息，数组模式原样使用调用方间隔。
+          // 别写 `(isRawString && messages.length > 1) ? ...` 这类分支 —— 上面 messages 的构造
+          // 保证 isRawString 为真时 length 恒为 1，它永远不可达，只会让人误以为
           // "字符串多段时有特殊间隔策略"。
           const gapMode = (body.gapMode === 'fixed' || body.gapMode === 'byLength') ? body.gapMode : 'auto';
           const gapMs = Number(body.gapMs);
@@ -5967,7 +5961,7 @@ async function main() {
           st.sendTimes.push(now);
           if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
           // 成员校验是异步的（要问 OneBot）；期间操作者可能切模式/改白名单/开静默。
-          // 拍一拍此前完全没有发送守卫，这里补上：真正发之前再确认一次。
+          // 拍一拍也要走发送守卫：真正发之前再确认一次。
           const sendGuard = captureSendGuard(key);
           try {
             sendGuard();
@@ -6585,7 +6579,7 @@ async function main() {
               voices: items,
               limits: { maxSeconds: voice.maxSeconds, maxBytes: voice.maxBytes, maxPerMinute: voice.maxPerMinute, maxPerHour: voice.maxPerHour },
               // ⚠️ 提示语里也不能出现绝对路径：AI 通道下同样要脱敏（dir 字段已经抑制了，
-              // 但这里的模板字符串曾无条件插值 voice.dir —— 等于从旁边的字段又漏出去一次）。
+              // 模板字符串里也不要无条件插值 voice.dir —— 那等于从旁边的字段又漏出去一次）。
               hint: items.length
                 ? '用 qq_send_voice 传 name 即可把其中一个当语音发出去'
                 : (agentCall ? '语音库为空：请让管理员先把音频放进语音库' : `语音库为空：把音频文件放进 ${voice.dir} 后重试`)
@@ -7638,8 +7632,8 @@ async function main() {
           const targetId = isPrivate ? String(body.userId ?? '').trim() : String(body.groupId ?? '').trim();
           const message = unquoteJsonString(String(body.message ?? '').trim());
           // 引用 id 与端点无关：/api/send/reply 与另两个端点都允许带（是否真的引用由下游按 id 判断）。
-          // 旧写法 `isReply ? body.replyToMessageId : body.replyToMessageId` 两个分支一模一样，
-          // 保留 isReply 变量只是为了下面的端点语义判断，别再让人以为这里有过分支逻辑。
+          // 这里不要按 isReply 分叉（`isReply ? x : x` 两个分支一模一样）：保留 isReply 变量
+          // 只是为了下面的端点语义判断。
           const replyToMessageId = body.replyToMessageId;
           const atUserId = body.atUserId ?? null;
           const key = isPrivate ? `private:${targetId}` : `group:${targetId}`;
@@ -7696,9 +7690,8 @@ async function main() {
           if (message.length > maxChars) { sendJson({ ok: false, error: `单条消息不能超过 ${maxChars} 字` }, 400); return; }
           if (SENSITIVE_RE.test(message)) { sendJson({ ok: false, error: '消息含敏感信息，已阻止发送' }, 403); return; }
           // st/now 必须声明在 try **之外**：下面的 catch 要用它们回滚预占的发送额度。
-          // 写在 try 里时 catch 拿到的是块作用域外的名字 ⇒ ReferenceError（send-burst
-          // 曾整段踩过同型问题，见体检报告 #1 / R2）。后果不是"少一行日志"，而是
-          // 失败响应变成「st is not defined」、额度不回滚（接下来一分钟全是假 429），
+          // 写在 try 里时 catch 拿到的是块作用域外的名字 ⇒ ReferenceError。后果不是"少一行日志"，
+          // 而是失败响应变成「st is not defined」、额度不回滚（接下来一分钟全是假 429），
           // 且部分成功的已发消息不会被记进 recentMessages。
           const st = getSocialV2State(key);
           const now = Date.now();
@@ -7797,7 +7790,7 @@ async function main() {
           let archivedCount = 0;
           let stoppedCount = 0;
           try {
-            // 新版 DSH 不再提供 workspace.list；改为扫描本桥接创建的会话目录并归档。
+            // DSH 不提供 workspace.list；改为扫描本桥接创建的会话目录并归档。
             // 只处理 cwd 位于 qq-bridge state/ 下的根会话；子代理会话由父会话管理，不能误归档。
             const list = unwrap(await withTimeout(api.sessions.list({}), DSH_CONTROL_TIMEOUT_MS, 'sessions.list'), 'session.list');
             const stateDir = path.resolve(STATE_DIR);
@@ -7856,7 +7849,7 @@ async function main() {
           setTimeout(() => {
             log('控制台：重启桥接');
             // 退出前落盘：SIGINT/SIGTERM 的收尾路径会 saveState()/saveSocialV2State()，
-            // 而重启这条路径以前直接 process.exit，500ms 窗口内改动的唤醒配置/计数器会丢。
+            // 重启路径同样要先落盘，否则 500ms 窗口内改动的唤醒配置/计数器会丢。
             try { saveState(); } catch (error) { log('重启前保存会话映射失败:', error?.message ?? error); }
             try { saveSocialV2State(); } catch (error) { log('重启前保存仿真会话状态失败:', error?.message ?? error); }
             releaseLock();
@@ -7942,7 +7935,7 @@ async function main() {
   }
 
   // 最近一次发送是否全部成功（按 key）。调用方据此决定要不要刷新「我发过言了」的时间戳 ——
-  // 旧实现把发送失败吞成一行日志后**照常 resolve**，于是调用方以为发言成功，
+  // 发送失败若被吞成一行日志后**照常 resolve**，调用方就会以为发言成功，
   // 更新 lastAiReplyAt / 活跃调度，实际群里什么都没收到，而且只有一行滚动日志能看出问题。
   const lastSendFailed = new Map(); // key -> true（下一次成功即清除）
 
@@ -8043,10 +8036,10 @@ async function main() {
     const out = [];
     let cur = '';
     // ⚠️ 占位符 \u0000URL<n>\u0000 必须是**不可切开的最小单位**。
-    // 早先的实现对超长 token 直接按 safeMax 硬切，会把占位符拦腰截断
+    // 对超长 token 直接按 safeMax 硬切会把占位符拦腰截断
     // （如 "\u0000UR" + "L0\u0000"），后面的还原正则 \u0000URL(\d+)\u0000 就匹配不上 →
-    // **URL 整条丢失 + 裸 NUL + 字面量 "URL0" 被发进 QQ 消息**（实测 13 个偏移里 5 个损坏）。
-    // 这里改成按占位符边界切分，宁可某段略超 max 也绝不切碎占位符。
+    // **URL 整条丢失 + 裸 NUL + 字面量 "URL0" 被发进 QQ 消息**。
+    // 这里按占位符边界切分，宁可某段略超 max 也绝不切碎占位符。
     const PLACEHOLDER_ANY = /\u0000URL\d+\u0000/;
     const PLACEHOLDER_ALL = /\u0000URL\d+\u0000/g;
     /** 把 token 切成 {text, isPlaceholder} 序列（占位符整体一块，绝不拆） */
@@ -8768,7 +8761,7 @@ async function main() {
   // 会话模型应用去重：每个 DSH 会话在本进程内只 selectModel 一次；
   // 控制台热切换思考强度时递增 modelSelectionEpoch，使旧记录失效并在下一条消息重新应用。
   // 四种 QQ 模式共用 DSH 会话，统一强制使用多模态模型 DeepSeek-V41-Flash（id: deepseek-flash）；
-  // 它同时支持 text/image 输入，取代已下线的 deepseek-v4-flash-vision-exp。
+  // 它同时支持 text/image 输入。
   const modelAppliedSessions = new Map(); // sessionId -> 已应用的 modelSelectionEpoch
   // 返回 'applied' | 'not-found' | 'failed'。
   // 'not-found' 表示 DSH 侧会话已经不存在（DSH 重启、异常退出、归档竞态），
@@ -8876,7 +8869,7 @@ async function main() {
       if (!sessionId) {
         throw new Error(`无法为 ${key} 创建 DSH 会话（模式 ${currentMode}，preset ${preset ?? '无'}）：${lastError?.message ?? '未知原因'}。已拒绝退化为 DSH 默认 preset 会话——那会把本地工具暴露给 QQ 群。`);
       }
-      // 新版 DSH 事件流需要显式 follow 该会话，否则收不到 turn 事件。
+      // 事件流需要显式 follow 该会话，否则收不到 turn 事件。
       api.events.follow(sessionId);
       // reset/清空工作区期间创建完成：丢弃，防止旧会话复活
       if (epoch !== sessionEpoch || policy !== sessionPolicy(key) || !isSessionAllowedInCurrentMode(key)) {
@@ -8913,7 +8906,7 @@ async function main() {
   let selfNickname = 'deepseek'; // 机器人昵称（小写；启动时从网关获取，识别"被提到"用）
   // 给 agent 看的身份（保留原始大小写）与机器人自己的 QQ 号。
   // 为什么必须单独存：消息里只有 "@樰" 这一串文本，agent 没有任何途径知道"樰"就是它自己，
-  // 于是会把 @自己 当成 @别人、已读不回（issue #29）。昵称与 QQ 号要显式写进 prompt。
+  // 于是会把 @自己 当成 @别人、已读不回。昵称与 QQ 号要显式写进 prompt。
   let selfDisplayName = '';
   let selfUserId = '';
   const SILENT_TURN_TIMEOUT_MS = 300000; // 静默回合名额 5 分钟未消费则作废，避免吞掉后续正常回复
@@ -8953,7 +8946,7 @@ async function main() {
   }
 
   // triggers 的**唯一**合法字段集合。写入与加载都按它过滤：
-  // 旧写法 `{...current.triggers, ...inputTriggers}` 会把模型传来的任意键原样并入、
+  // 直接 `{...current.triggers, ...inputTriggers}` 会把模型传来的任意键原样并入、
   // 持久化、再由 qq_get_prompt 原样回给模型（每次请求都带着），等于给了一个
   // 「用 1MB 垃圾键把状态文件与每轮 prompt 撑大」的入口。
   const WAKE_TRIGGER_KEYS = Object.freeze(['atMention', 'nameMention', 'speakerIds', 'keywords', 'question', 'poke', 'anyMessage', 'probability']);
@@ -9398,7 +9391,7 @@ async function main() {
       // 只接受规范 key；__proto__/constructor 这类脏键在这里就被过滤掉。
       const canonical = canonicalV2Key(key);
       if (!canonical) continue;
-      // 注意：这里**不按上限截断**。文件里若有一条超过当前上限的内容（比如后来调小了上限，
+      // 注意：这里**不按上限截断**。文件里若有一条超过当前上限的内容（比如上限被调小过，
       // 或手工编辑过），截断它会在下一次保存时把截断结果写回磁盘 —— 静默丢数据。
       // 上限只在「保存」和「注入」两个出口生效。
       const text = normalizeInitialPromptText(value && typeof value === 'object' ? value.text : value);
@@ -9913,11 +9906,11 @@ async function main() {
   }
 
   function currentRoleHintV2() {
-    // 先按角色卡小节标记（〔一代〕= 仅文本模式 / 〔二代〕= 仅工具模式）筛小节；下面的逐行过滤只是给「没标记的老卡片」兜底。
+    // 先按角色卡小节标记（〔一代〕= 仅文本模式 / 〔二代〕= 仅工具模式）筛小节；下面的逐行过滤只是给「没加标记的卡片」兜底。
     const raw = roleHintForMode('v2');
     if (!raw) return '';
     // 文本模式专用指令整行过滤，避免污染仿真模式的工具协议。
-    // 用 role-card.js 导出的那份（文件顶部已 import）：这里原先又抄了一份同源正则，
+    // 用 role-card.js 导出的那份（文件顶部已 import）：不要在这里再抄一份同源正则 ——
     // 两份"哪行算文本模式指令"的安全相关过滤器一旦漂移，就会出现"selectRoleText 认为是工具模式内容、
     // 这里却把文本模式指令漏进工具模式提示词"这种只在特定角色卡上复现的错。
     const lines = raw.split('\n');
@@ -10561,7 +10554,7 @@ async function main() {
 
   // 机器人自己的身份（昵称 + QQ 号）。**必须显式写进 prompt**：
   // agent 能看到的消息里只有 "@樰" 这串文本，没人告诉它"樰"就是它自己，于是它会把
-  // @自己 当成 @别人、已读不回（issue #29）。群名片可能与昵称不同，但 at/引用段里
+  // @自己 当成 @别人、已读不回。群名片可能与昵称不同，但 at/引用段里
   // 带的是 QQ 号，所以两条都给。
   function selfIdentityTextV2() {
     const name = String(selfDisplayName || '').trim();
@@ -11531,7 +11524,7 @@ async function main() {
   /**
    * 把一条 session/event 喂给该会话的 turn collector，并维护 collectors 的生命周期。
    *
-   * 两条不变量（都曾被真实故障踩过）：
+   * 两条不变量（违反任何一条都会真实踩坑）：
    *   ① 只为 turn/start 建 collector —— 任何事件都建的话，一条重连后补发的
    *      assistant/message 就会留下永不结束的空 collector，而「会话是否繁忙」正是按
    *      collectors.has() 判断的 ⇒ 这个会话从此再也收不到唤醒；
@@ -11558,7 +11551,7 @@ async function main() {
   }
 
   async function pumpMux() {
-    // 事件流重连退避：DSH 侧流被立刻关闭时（例如版本不兼容，见 issue #34），
+    // 事件流重连退避：DSH 侧流被立刻关闭时（例如版本不兼容），
     // 固定 3 秒重连会以每分钟 20 行的速度刷屏，真正有用的错误反而被淹没。
     let retryMs = 3000;
     let failureStreak = 0;
@@ -11583,7 +11576,7 @@ async function main() {
             if (!key) {
               // 黑话学习会话：只收集 turn，不发送 QQ，并唤醒等待中的学习任务。
               if (learnerSessions.has(frame.sessionId)) {
-                // 与主 collector 同样的道理（issue #26 的补充）：**只有 turn/start 才建** collector。
+                // 与主 collector 同样的道理：**只有 turn/start 才建** collector。
                 // 迟到事件（session/end-seed、session/title、model/selection…）不会有 turn/end，
                 // 若在这里顺手建一个，它会永远留在 learnerCollectors 里并吞掉后续 turn 事件，
                 // 等待者要么拿不到结果、要么拿到错位的文本。
@@ -11606,7 +11599,7 @@ async function main() {
                       waiter.reject(new Error(`学习会话 turn 未正常完成：${learnerEnded.reason.kind}`));
                     }
                   }
-                  // 旧学习会话 turn 结束后从集合移除，避免残留
+                  // 上一个学习会话 turn 结束后从集合移除，避免残留
                   if (frame.sessionId !== slangLearnerSessionId) learnerSessions.delete(frame.sessionId);
                 }
               }
@@ -11798,7 +11791,7 @@ async function main() {
               } else if (ended.reason.kind === 'error') {
                 const msg = ended.reason.error?.message ?? '未知错误';
                 const safeMsg = shouldAuditKey(key) && SENSITIVE_RE.test(msg) ? '（含敏感信息，已隐藏）' : msg.slice(0, 500);
-                // 以前这里只发 QQ、不写日志：出问题时 bridge.log 里什么都没有，排查只能靠猜（PR #24）。
+                // 只发 QQ、不写日志的话，出问题时 bridge.log 里什么都没有，排查只能靠猜。
                 log(`⚠️ agent 处理出错 (${key})：${safeMsg}`);
                 appendActivity(`${key} agent 处理出错：${safeMsg.slice(0, 80)}`);
                 await sendToQQ(key, `⚠️ agent 处理出错：${safeMsg}`);
@@ -11872,7 +11865,7 @@ async function main() {
             log('事件流错误:', frame.error);
           }
         }
-        // 流正常关闭（服务端主动断开）不会抛错。以前这里什么都不打，日志看起来
+        // 流正常关闭（服务端主动断开）不会抛错。这里必须打一行日志，否则日志看起来
         // 就像「连上了、然后又连一次」，完全看不出 DSH 把流关了。
         log(`DSH 事件流已结束（本次收到 ${framesThisStream} 帧）`);
       } catch (error) {
@@ -11937,7 +11930,7 @@ async function main() {
   //   · 任意事件包 → 记账（证明 SnowLuma 进程 + WS 链路还在）；
   //   · `meta_event/heartbeat` → 读载荷里的 `status.good`。**这是主信号**：
   //     SnowLuma 每 30 秒无条件发一次心跳，而 good = online && receiveHealthy 是它对
-  //     「QQ → hook → 我」这条接收链路的自评（实测核对过 1.14.9 运行时源码）。
+  //     「QQ → hook → 我」这条接收链路的自评（实测核对过运行时源码）。
   //     免费、及时，且**不依赖较新的运行时**。
   // 注册失败不影响主链路（不同 SDK 版本的订阅方法可能不同），所以整体包在 try 里。
   try {
@@ -11958,7 +11951,7 @@ async function main() {
     log(`（上游事件旁路订阅不可用，健康检测退化：${error?.message ?? error}）`);
   }
 
-  // SnowLuma 1.14.17 起新增 bot_status（账号会话边沿）。老运行时不会发这个事件，
+  // 较新的 SnowLuma 才有 bot_status（账号会话边沿）。老运行时不会发这个事件，
   // 所以它只是加分项：收到就记下来，收不到不影响其它判断。
   try {
     bot.onBotStatus((event) => {
@@ -12071,7 +12064,7 @@ async function main() {
     try {
       const r = persistToken(configPath(), cfg.snowluma.accessToken ?? '');
       // 只记「已写回」，不打印 token 片段：日志会被贴进 issue / 截图，
-      // 前 4 个字符同样是凭据的一部分（CWE-532，见 PR #13）。
+      // 前 4 个字符同样是凭据的一部分（CWE-532）。
       if (r.updated) log('🔄 已把当前 token 写回 config.json');
     } catch {}
   }
@@ -12105,7 +12098,7 @@ async function main() {
   bot.on('error', (error) => {
     // SDK 在 WS 升级被拒（401 / 建连失败）时可能**只 emit error、不 emit close**，
     // 于是挂在 close 上的 token 自愈永远不会触发 —— 表现为「桥接活着但收发全废」，
-    // 用户只能靠手工改 token 绕过去（issue #19）。这里同样尝试一次（内部有 10s 节流）。
+    // 用户只能靠手工改 token 绕过去。这里同样尝试一次（内部有 10s 节流）。
     const detail = error && typeof error === 'object'
       ? [error.code, error.message, error.reason, error.type].filter(Boolean).join(' | ') || JSON.stringify(error)
       : String(error ?? '');

@@ -6,7 +6,7 @@
 <section class="panel">
   <h2>人格卡 <small>（保存后下一条消息即生效；与"仿真预设"是两层）</small></h2>
   {% if info %}
-  <p class="hint">当前人格：<b>{{ info.current or '（未设置）' }}</b> · 模式 {{ info.mode }} · 注入上限 {{ info.limits.injectMaxChars }} 字</p>
+  <p class="hint">当前人格：<b>{{ info.current or '（未设置）' }}</b> · 模式 {{ info.mode|mode_label }} · 注入上限 {{ info.limits.injectMaxChars }} 字</p>
   <table class="table table-hover align-middle mb-0">
     <thead><tr><th>人格</th><th>字数（仿真实注入）</th><th>告警</th><th></th></tr></thead>
     <tbody>

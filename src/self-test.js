@@ -97,7 +97,7 @@ async function main() {
     })().catch((error) => { clearTimeout(timer); reject(error); });
   });
   await opened;
-  // 新版 DSH 需要显式 follow 该会话，事件才会通过 remote.mux 推过来。
+  // 必须显式 follow 该会话，事件才会通过 remote.mux 推过来。
   stream.follow(sessionId);
 
   const accepted = unwrap(await api.sessions.prompt({ sessionId, mode: 'queue', content: [{ type: 'text', text: promptText }] }), 'session.prompt');

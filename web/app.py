@@ -79,6 +79,32 @@ def create_app() -> Flask:
     app.register_blueprint(settings_bp)
     app.register_blueprint(config_bp)
 
+    MODE_LABELS = {
+        "reserved2": "仿真模式",
+        "reserved": "混合模式",
+        "chat": "文本模式",
+        "closed-agent": "管理员私聊",
+        "diving": "潜水",
+        "active": "活跃",
+    }
+    ROLE_LABELS = {"admin": "管理员", "editor": "编辑者"}
+
+    @app.template_filter("mode_label")
+    def _mode_label(value):
+        return MODE_LABELS.get(str(value), value)
+
+    @app.template_filter("role_label")
+    def _role_label(value):
+        return ROLE_LABELS.get(str(value), value)
+
+    @app.template_filter("fmt_ts")
+    def _fmt_ts(value):
+        try:
+            from datetime import datetime
+            return datetime.fromtimestamp(float(value)).strftime("%Y-%m-%d %H:%M")
+        except (TypeError, ValueError, OSError):
+            return "—"
+
     @app.errorhandler(404)
     def not_found(_exc):
         return render_template("error.html", message="页面不存在"), 404
@@ -116,5 +142,5 @@ def create_app() -> Flask:
 app = create_app()
 
 if __name__ == "__main__":
-    print(f"qq-bridge 控制台启动：http://127.0.0.1:{settings.port}/  （bridge={settings.bridge_url}）")
+    print("qq-bridge 控制台已启动")
     app.run(host=settings.bind, port=settings.port, threaded=True, debug=settings.debug, use_reloader=False)

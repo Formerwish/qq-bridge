@@ -1,13 +1,13 @@
 // 联网搜索（MCP `web_search` 的实现）。
 //
-// 设计目标：**优先复用 DSH 原本的联网搜索能力**，而不是自己抓 Bing 的搜索结果页。
+// 设计目标：**复用 DSH 的联网搜索能力**，而不是自己抓 Bing 的搜索结果页。
 //
 // DSH 的 `web_search` 工具背后是 `@deepseek-ai/dsh-web-search-deepseek`：
 // 向 DeepSeek 的 Anthropic 兼容 Messages 端点发一次带 `web_search_20250305`
 // 服务端工具的请求，从 `web_search_tool_result` 里取结构化结果。本模块照同一
 // 端点/模型/工具参数实现一份最小客户端，于是 QQ 里的 AI 和 DSH 里的 AI 拿到的是
 // **同一路搜索结果**；搜索词只发给 DeepSeek（也就是本来就在处理这段对话的同一家），
-// 不再把群聊里提炼出来的词发给 Bing。
+// 不把群聊里提炼出来的词发给 Bing。
 //
 // 凭据解析顺序与 DSH 一致：
 //   1. config.json 的 `webSearch.apiKey`（不推荐，明文）
@@ -386,7 +386,7 @@ export function parseBingRss(xml, maxResults = 8) {
   return results;
 }
 
-/** Bing 的 HTML 结果页（RSS 不可用时的兜底，保持旧实现的解析口径）。 */
+/** Bing 的 HTML 结果页（RSS 不可用时的兜底）。 */
 export function parseBingHtml(html, maxResults = 8) {
   const results = [];
   const seen = new Set();
@@ -481,8 +481,8 @@ export async function webSearch(query, options = {}) {
       value = { ...value, fallbackFrom: 'deepseek', note: `${reason}，已回退 Bing` };
     }
   }
-  // 空结果必须显式说明：以前直接返回 `results: []`，模型分不清「真没搜到」和
-  // 「搜索接口静默失效」，会一直换关键词重试（issue #17）。现在给出可操作的下一步。
+  // 空结果必须显式说明：直接返回 `results: []` 会让模型分不清「真没搜到」和
+  // 「搜索接口静默失效」，于是一直换关键词重试；这里给出可操作的下一步。
   // ⚠️ 这段必须在 `cache.set` **之前**：note 走的是「新建对象」而不是原地改，
   // 而缓存里存的是**引用**。反过来写（先缓存、后加 note）时，5 分钟内的重复查询会命中
   // 那个没有 note 的旧对象 —— 恰好是模型最容易开始重试的场景（同一句 query 连着问）。

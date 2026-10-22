@@ -1,4 +1,4 @@
-# 第五人格知识库（MySQL）——桥接侧接入说明
+﻿# 第五人格知识库（MySQL）——桥接侧接入说明
 
 > 目标：让 QQ 里的 AI **知道第五人格的设定与术语**，但不在每轮唤醒里白烧 token。
 > 做法：知识点存在 MySQL（`qq_bridge_kb`），**只有群消息命中关键词时才注入**；另给 AI 一个只读检索工具 `qq_kb_search`。
@@ -95,7 +95,7 @@ GRANT SELECT ON qq_bridge_kb.* TO 'qqkb_bridge'@'127.0.0.1';
 
 | 文件 | 作用 |
 | --- | --- |
-| [`src/kb-mysql.js`](../src/kb-mysql.js) | 只读客户端：配置归一化、关键词缓存、命中、注入块、检索、统计；**所有异常 fail-open** |
+| [`src/kb-mysql.js`](../../src/kb-mysql.js) | 只读客户端：配置归一化、关键词缓存、命中、注入块、检索、统计；**所有异常 fail-open** |
 | `src/bridge.js` | `withSlangContext(promptText, kbText)` 串注入；`feedKbWindow` / `kbInjectionFor`；`GET /api/socialV2/kb-search`；`socialV2.tools.kbSearch` 开关 |
 | `src/mcp-snowluma-safe.js` | 注册 `qq_kb_search`（`TOOL_CONFIG_FLAGS` 里映射到 `kbSearch`） |
 | `dsh/agent-presets/qq-chat-v2/agent.cordis.yml` | 第 17 条：不确定就先查 `qq_kb_search`，查不到别硬编 |

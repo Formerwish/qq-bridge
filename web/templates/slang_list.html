@@ -2,7 +2,7 @@
 {% block title %}黑话库 · qq-bridge 控制台{% endblock %}
 {% block content %}
 <section class="panel">
-  <h2>黑话库 <small>（共 {{ rows|length }} 条待处理视图；DB 权威，桥接 60s 内同步）</small>
+  <h2>黑话库 <small>（共 {{ rows|length }} 条；桥接 60s 内同步）</small>
     <form method="post" action="/slang/learn" class="inline right">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       <button class="btn btn-outline-secondary" name="mode" value="extract" type="submit">AI 抽取候选</button>

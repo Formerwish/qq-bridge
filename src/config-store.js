@@ -1,16 +1,14 @@
-// 配置读写：config.toml 是唯一权威文件，config.json 只是**过渡期生成的镜像**。
+// 配置读写：config.toml 是唯一权威文件，config.json 是保存时按需生成的 JSON 镜像。
 //
 // 为什么需要这一层：
-// - 配置项被 bridge / MCP / 40+ 脚本读取，直接散落 `JSON.parse(fs.readFileSync('config.json'))`
-//   无法从 JSON 平滑迁到 TOML。统一入口后，迁移只改这一处，调用方无感。
+// - 配置项被 bridge / MCP / 40+ 脚本读取，统一入口后调用方不必各自解析文件。
 // - 程序化保存（token 自愈、控制台改设置）要同时更新 TOML 与 JSON 镜像，否则两边不一致。
 // - TOML 没有 null：序列化前要剔除 null/undefined，否则 smol-toml 直接抛错。
 //
-// 迁移策略（P0）：
+// 读写规则：
 //   1) `config.toml` 存在 → 一律读它（source='toml'）；
-//   2) 只有 `config.json` → 兼容读 JSON 并告警（一次性迁移用）；
-//   3) 保存时永远写 TOML，并按需生成 JSON 镜像（`mirrorJson`），供尚未迁移的脚本读取；
-//   4) P6 删除镜像生成，全仓切换完成后 JSON 即可删除。
+//   2) 只有 `config.json` → 兼容读 JSON 并告警；
+//   3) 保存时永远写 TOML，并按需生成 JSON 镜像（`mirrorJson`），供只读 JSON 的脚本读取。
 //
 // 注意：TOML 序列化会丢弃注释（格式限制）。程序化保存只应发生在值真的变化时；
 // 用户手写的注释在"程序保存"后会丢，这一点写进部署文档。
@@ -101,7 +99,7 @@ export function loadConfigDocument(file = configPath()) {
   return { data, source: file, format: file.endsWith('.toml') ? 'toml' : 'json' };
 }
 
-/** 宽松读取：读不到/解析失败时返回 fallback（供"只读几个字段"的老代码用）。 */
+/** 宽松读取：读不到/解析失败时返回 fallback（供只读个别字段的调用方用）。 */
 export function readConfigRaw(fallback = {}) {
   try {
     return loadConfigDocument().data;
@@ -133,7 +131,7 @@ function writeFileAtomic(file, text) {
 }
 
 /**
- * 保存配置：写 TOML，并（默认）同步生成 JSON 镜像供过渡期脚本读取。
+ * 保存配置：写 TOML，并（默认）同步生成 JSON 镜像供只读 JSON 的脚本读取。
  * @returns {{ toml: string, json: string|null }}
  */
 export function writeConfigDocument(data, { mirrorJson = true, jsonPath = configJsonPath() } = {}) {
@@ -147,17 +145,9 @@ export function writeConfigDocument(data, { mirrorJson = true, jsonPath = config
   return { toml: tomlPath, json: jsonWritten };
 }
 
-/** 读 → 改 → 写（mutator 直接改传入对象或返回新对象）。 */
-export function updateConfigDocument(mutator, opts) {
-  const { data } = loadConfigDocument();
-  const next = mutator(data) ?? data;
-  writeConfigDocument(next, opts);
-  return next;
-}
-
 /**
  * 把 config.toml 同步成 JSON 镜像（只在内容不同时写）。
- * 过渡期给尚未迁移的脚本用：桥接启动时跑一次，用户改完 TOML 重启即同步。
+ * 给只读 JSON 的脚本用：桥接启动时跑一次，用户改完 TOML 重启即同步。
  */
 export function syncConfigMirror({ jsonPath = configJsonPath() } = {}) {
   const { data } = loadConfigDocument();

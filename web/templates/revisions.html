@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}修订记录 · qq-bridge 控制台{% endblock %}
 {% block content %}
+{% set action_labels = {'create': '新建', 'update': '修改', 'enable': '启用', 'disable': '停用', 'delete': '删除', 'confirm': '确认', 'reject': '拒绝', 'candidate': '置为候选'} %}
 <section class="panel">
   <h2>知识库修订 <small>（最近 200 条）</small></h2>
   <table class="table table-hover align-middle mb-0">
@@ -9,7 +10,7 @@
     {% for row in rows %}
       <tr>
         <td class="muted">{{ row.id }}</td>
-        <td>{{ row.action }}</td>
+        <td>{{ action_labels.get(row.action, row.action) }}</td>
         <td>{{ row.title }}{% if row.current_title and row.current_title != row.title %}<span class="muted small">（现名：{{ row.current_title }}）</span>{% endif %}</td>
         <td>{{ row.actor }}</td>
         <td class="muted small">{{ row.created_at.strftime('%Y-%m-%d %H:%M') if row.created_at else '' }}</td>
@@ -29,7 +30,7 @@
     {% for row in slang_rows %}
       <tr>
         <td class="muted">{{ row.id }}</td>
-        <td>{{ row.action }}</td>
+        <td>{{ action_labels.get(row.action, row.action) }}</td>
         <td>{{ row.content }}</td>
         <td>{{ row.actor }}</td>
         <td class="muted small">{{ row.created_at.strftime('%Y-%m-%d %H:%M') if row.created_at else '' }}</td>

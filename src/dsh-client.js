@@ -1,13 +1,11 @@
 // Node 环境的 DSH Web API 客户端。
-// 兼容 DSH 0.1.2-alpha.1 引入、并在 0.1.5-rc.1 上复核通过的协议：
-// 1. RPC 方法从点号改为斜杠（host.describe -> host/describe 等）；
+// 本文件实现的协议形状：
+// 1. RPC 方法用斜杠（host.describe -> host/describe 等），不是点号；
 // 2. payload 包装为 { args: { <参数名>: 原payload } }（session/list 用 _request，其余多为 request）；
-// 3. 新增浏览器会话鉴权：先用 dsh.authToken（进程启动 token）换取 Cookie，再带 Cookie 访问 API/WS；
-// 4. 事件流不再是 events.mux 下行，而是 /api/remote.mux 上按 session/follow 打开的流，
-//    Remote Event（提问/审批）走同一条 mux 上的 $events 逻辑流 + $events/result 回执。
-// 复核记录（DSH 0.1.5-rc.1，逐项实测）：session/{list,create,prompt,selectModel,rename},
-// workspace/{create,rename,archiveSession}, settings/describe, agentPresets/list 的参数形状与
-// 返回结构均与本文件一致；session/prompt 在新版强制要求 requestId（wrapArgs 已自动补）。
+// 3. 浏览器会话鉴权：先用 dsh.authToken（进程启动 token）换取 Cookie，再带 Cookie 访问 API/WS；
+// 4. 事件流不是 events.mux 下行，而是 /api/remote.mux 上按 session/follow 打开的流，
+//    Remote Event（提问/审批）走同一条 mux 上的 $events 逻辑流 + $events/result 回执；
+//    session/prompt 强制要求 requestId（wrapArgs 已自动补）。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,29 +13,28 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 import YAML from 'js-yaml';
 import { AbstractApiClient } from '@deepseek-ai/dsh-host-apiproxy/client';
 
-/** DSH home：凭据文件与（历史）启动日志都在这里。 */
+/** DSH home：凭据文件与启动日志都在这里。 */
 export function resolveDshHome() {
   return process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
 }
 
 /**
- * 自动发现 DSH 的进程启动 token（新版 DSH 把它打印在 `dsh web` 的 URL 上）。
+ * 自动发现 DSH 的进程启动 token（它被打印在 `dsh web` 的 URL 上）。
  *
- * 注意：0.1.7 的启动 token 由 processLaunchToken() 现场生成（32 字节随机数，
- * 只存在内存 WeakMap 里，**不落盘、不可推导**），所以「读日志」这条路只有
- * 在启动器把 `dsh web` 的 stdout 重定向到文件时才成立。guard 退役后
- * boot-guard.ps1 不再写 ~/.dsh/guard/logs/server-*.out.log，日志里剩下的是
- * **旧进程的陈旧 token**，拿它换 Cookie 只会得到 401。
+ * 注意：启动 token 由 DSH 现场生成（32 字节随机数，只存在内存里，
+ * **不落盘、不可推导**），所以「读日志」这条路只有在启动器把 `dsh web` 的
+ * stdout 重定向到文件时才成立；日志里往往剩下的是**旧进程的陈旧 token**，
+ * 拿它换 Cookie 只会得到 401。
  * 因此这里只是最后的兜底，主路径是 {@link discoverDshSessionCookie}。
  *
- * 查找顺序：环境变量 DSH_LAUNCH_TOKEN → DSH_HOME/logs（新启动器）→
- * DSH_HOME/guard/logs（guard 时代的历史日志，按时间从新到旧）。
+ * 查找顺序：环境变量 DSH_LAUNCH_TOKEN → DSH_HOME/logs（主启动日志）→
+ * DSH_HOME/guard/logs（按时间从新到旧）。
  */
 export function discoverDshLaunchToken() {
   const fromEnv = process.env.DSH_LAUNCH_TOKEN;
   if (typeof fromEnv === 'string' && /^[A-Za-z0-9_-]{16,}$/.test(fromEnv)) return fromEnv;
   const home = resolveDshHome();
-  // DSH_HOME/logs 是退役 guard 之后约定的启动日志位置；guard/logs 保留兼容。
+  // DSH_HOME/logs 是启动日志的位置；guard/logs 作为兼容路径一并查找。
   const dirs = [path.join(home, 'logs'), path.join(home, 'guard', 'logs')];
   for (const logsDir of dirs) {
     let files;
@@ -64,8 +61,7 @@ export function discoverDshLaunchToken() {
 
 // ── 浏览器会话 Cookie 铸造（不依赖进程启动 token）────────────────────────────
 // 背景：进程启动 token 是现生成、只在内存里的随机数，进程一重启就失效，且只有
-// 「启动器记了 stdout 日志」时才能被发现——DSH 每升一次级、启动方式每变一次，
-// 这条链路就要重新适配一次。
+// 「启动器记了 stdout 日志」时才能被发现——DSH 换个启动方式，这条链路就断。
 //
 // DSH 另有一份**持久化**的会话签名密钥：credentials 里的
 // `client-connection/browser-session`（32 字节，首次生成后长期不变）。浏览器
@@ -202,20 +198,17 @@ export const FOLLOW_SNAPSHOT_MESSAGES = 200;
 /**
  * 从一份 Session 投影值里取出待处理的 inbox 项（`next-turn` + `next-step`）。
  *
- * DSH 0.2.0 的投影形状（`SessionProjectionValues.inbox`，见 dsh-agent 的
- * `InboxWireState`）：`{ 'next-turn': UserMessage[], 'next-step': UserMessage[] }`，
- * 每条是一个序列化后的 `UserMessage`，**带 `id`（MessageId）** —— 这正是
- * `session/updateQueue` 的 `itemId` 需要的值。
+ * 投影形状（`SessionProjectionValues.inbox`，见 dsh-agent 的 `InboxWireState`）：
+ * `{ 'next-turn': UserMessage[], 'next-step': UserMessage[] }`，每条是一个序列化后的
+ * `UserMessage`，**带 `id`（MessageId）** —— 这正是 `session/updateQueue` 的 `itemId` 需要的值。
  *
- * 与 0.1.7 的差异（这就是线上「停止旧会话失败: invalid session/control baseline」的根因）：
- * 控制流 baseline 曾经把待处理队列平铺在 `value.queues[<sessionId>]`，0.2.0 起
- * 统一并入投影表 `value.projections[<sessionId>].values`，队列本身变成 `inbox` 键。
- * 只认旧字段的实现会在**每一次**退役/重置会话时抛错，队列清不掉 ⇒ 旧任务继续跑。
+ * 必须从投影表 `value.projections[<sessionId>].values` 的 `inbox` 键解析：认错形状会让
+ * **每一次**退役/重置会话都抛错，队列清不掉 ⇒ 旧任务继续跑。
  *
  * @param values - 单个会话的投影值（`SessionProjectionValues`）。
  * @returns 待处理项数组；该项能力缺失（无 agent / 无 inbox 投影）时为空数组。
  * @throws 当 inbox 存在但结构不是两个数组字段时——结构变了必须显式失败，
- *         否则会静默漏掉待处理消息（正是上面那个缺陷的形态）。
+ *         否则会静默漏掉待处理消息。
  */
 export function inboxItemsOfProjections(values) {
   if (values === null || typeof values !== 'object') return [];
@@ -251,7 +244,7 @@ export function inboxItemIds(items) {
 /**
  * 从 `session/control` 开场 baseline 帧里取出指定会话的待处理项。
  *
- * 0.2.0 的帧形状：`{ type:'baseline', value:{ projections:{ <sessionId>:{ asOfSeq, values } } } }`。
+ * 帧形状：`{ type:'baseline', value:{ projections:{ <sessionId>:{ asOfSeq, values } } } }`。
  * baseline 只包含**当前挂在宿主注册表里**的会话；不在其中即「没有活动 agent」⇒ 无待处理项。
  *
  * @throws 当 baseline 的投影表结构不符时（契约变更必须显式失败）。
@@ -265,11 +258,11 @@ export function controlBaselineInboxItems(frame, sessionId) {
   return inboxItemsOfProjections(projections[sessionId]?.values);
 }
 
-/** 把旧 payload 包装成新协议要求的 { args }，并补新版必填字段。 */
+/** 把调用方 payload 包装成协议要求的 { args }，并补必填字段。 */
 function wrapArgs(method, payload) {
   const endpoint = endpointOf(method);
   let body = payload ?? {};
-  // 新版 SessionPromptRequest 强制要求 requestId。
+  // SessionPromptRequest 强制要求 requestId。
   if (endpoint === 'session/prompt' && typeof body.requestId !== 'string') {
     body = { ...body, requestId: randomUUID() };
   }
@@ -477,15 +470,14 @@ export class NodeApiClient extends AbstractApiClient {
    * 读取一个会话的待处理 inbox 项（退役/重置前要清掉的队列）。
    *
    * 两条路，都解析同一份 `inbox` 投影（见 {@link inboxItemsOfProjections}）：
-   * 1. **主路径 `session/projections`**（DSH 0.2.0 起的一元 RPC，非激活读取）：
+   * 1. **主路径 `session/projections`**（一元 RPC，非激活读取）：
    *    `{request:{sessionId}}` → `{ asOfSeq, values } | null`。一条普通 HTTP RPC，
    *    可取消、可超时、可单测，不需要为「看一眼队列」开一条 WebSocket。
-   * 2. **回退 `session/control`**：该 endpoint 不存在（更早的 DSH）时，退回全宿主
+   * 2. **回退 `session/control`**：该 endpoint 不存在时，退回全宿主
    *    控制流的开场 baseline，从 `value.projections[sessionId].values` 取同一份数据。
    *
-   * 历史教训：这里曾经只认 `value.queues[sessionId]`（0.1.7 的形状），0.2.0 把它并入
-   * 投影表之后，每次退役会话都抛 "invalid session/control baseline"，队列清不掉、
-   * 旧任务继续烧 token。所以现在的解析放在**具名导出**里，由 test-dsh-client-* 直接钉住。
+   * 解析逻辑放在**具名导出**里，由 test-dsh-client-* 直接钉住：这里的形状认错，后果是
+   * 每次退役会话都抛 "invalid session/control baseline"，队列清不掉、旧任务继续烧 token。
    */
   async _readSessionQueue(sessionId, signal) {
     await this.ensureAuth(signal);
@@ -590,10 +582,10 @@ export class NodeApiClient extends AbstractApiClient {
   }
 
   /**
-   * 覆写 unary RPC：适配 DSH 0.1.2 起、0.1.5 仍沿用的斜杠 endpoint 和 { args } 包装，
+   * 覆写 unary RPC：适配斜杠 endpoint 和 { args } 包装，
    * 并且只解析最外层信封，不依赖官方包的 value schema
-   * （桥接依赖的 @deepseek-ai/dsh-host-apiproxy 是独立的旧版客户端包，DSH 升级不影响它）。
-   * 注意：新版基类里 callUnary 是 protected/private，这里用同名 public 方法覆写即可，
+   * （桥接依赖的 @deepseek-ai/dsh-host-apiproxy 是独立的客户端包，DSH 升级不影响它）。
+   * 注意：基类里 callUnary 是 protected/private，这里用同名 public 方法覆写即可，
    * 业务侧一律走桥接自己的 sessions/workspace/settings 门面，不依赖基类的域方法。
    */
   async callUnary(method, payload, signal, timeoutPolicy = 'default') {
@@ -615,9 +607,9 @@ export class NodeApiClient extends AbstractApiClient {
   }
 
   /**
-   * respond 在新版 DSH 中由 Remote Event 结果通道承担：POST /api/$events/result。
-   * 调用方传 { clientId, eventId, outcome }；旧版 { type:'client-response', ... } 仍保留旧路径，
-   * 若旧路径 404 会由上层捕获并记录，不会影响新版链路。
+   * respond 由 Remote Event 结果通道承担：POST /api/$events/result。
+   * 调用方传 { clientId, eventId, outcome }；三者缺一时退回 POST /api/respond
+   * （{ type:'client-response', ... } 的旧路径），该路径 404 由上层捕获并记录，不影响主链路。
    */
   async respond(message, signal) {
     if (message?.clientId && message?.eventId && message?.outcome) {
@@ -637,14 +629,14 @@ export class NodeApiClient extends AbstractApiClient {
     return response.json();
   }
 
-  /** 新版 DSH 的 agentPresets 命名空间是复数；旧版基类仍映射到 agentPreset.list。 */
+  /** agentPresets 命名空间是复数；基类仍映射到 agentPreset.list。 */
   agentPresets = {
     list: (payload, signal) => this.callUnary('agentPresets.list', payload, signal),
   };
 
   /**
-   * 新版事件流：连接 /api/remote.mux，自动 follow 所有 session，并把
-   * session/follow 的 event 帧映射成旧 pumpMux 能消费的 session/event 信封。
+   * 事件流：连接 /api/remote.mux，自动 follow 所有 session，并把
+   * session/follow 的 event 帧映射成 pumpMux 消费的 session/event 信封。
    */
   events = {
     mux: (_payload, signal, onOpen) => this.openRemoteEventStream(signal, onOpen),
@@ -855,10 +847,10 @@ export class NodeApiClient extends AbstractApiClient {
           streamToSession.delete(msg.streamId);
           followed.delete(sessionId);
           // DSH 正常结束了单条会话流（follow 被回收 / 会话被归档 / 服务端空闲清理）。
-          // 旧代码在这里什么都不做：不重订阅、不打日志，而重放只在 socket 'open' 时发生，
-          // 于是这个会话**永久失联**且毫无提示。更糟的是若它断在回合中间，
-          // collectors/v2TurnStartAt 会一直留着 → isConversationBusyV2 永远为真 →
-          // 该群所有唤醒都被塞进 pendingWakeReasons，群彻底哑掉且没有租约能救。
+          // 不在这里重新订阅的话，重放只在 socket 'open' 时发生，这个会话会**永久失联**
+          // 且毫无提示。更糟的是若它断在回合中间，collectors/v2TurnStartAt 会一直留着
+          // → isConversationBusyV2 永远为真 → 该群所有唤醒都被塞进 pendingWakeReasons，
+          // 群彻底哑掉且没有租约能救。
           // 这里主动重开一次订阅；仍然想订阅的会话才重开（forget 过的就让它走）。
           if (this._desiredFollows.has(sessionId)) {
             console.error(`[dsh-client] session/follow 已被服务端结束，重新订阅：${sessionId}`);
@@ -940,7 +932,7 @@ export function createTurnCollector() {
       }
       if (event.type === 'assistant/chunk') {
         // 忽略流式分块：assistant/message 携带同一内容的完整组装文本，
-        // 两者都累加会导致回复文本翻倍（曾因此把「收到」发成「收到收到」）。
+        // 两者都累加会导致回复文本翻倍。
         return null;
       }
       if (event.type === 'assistant/message') {
@@ -967,12 +959,4 @@ export function createTurnCollector() {
       return turns.size;
     }
   };
-}
-
-/** 从 assistant 消息的 ContentBlock[] 中提取纯文本。 */
-export function blocksToText(content) {
-  return (content ?? [])
-    .filter((b) => b?.type === 'text' && typeof b.text === 'string')
-    .map((b) => b.text)
-    .join('');
 }

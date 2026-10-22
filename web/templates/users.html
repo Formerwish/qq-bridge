@@ -2,8 +2,8 @@
 {% block title %}用户管理 · qq-bridge 控制台{% endblock %}
 {% block content %}
 <section class="panel">
-  <h2>用户管理 <small>（管理员可创建/重置密码/启停；用户表与知识库共用）</small></h2>
-  <div class="banner warn">密码按<b>明文</b>存储（用户要求，不兼容旧哈希）：任何能读数据库/备份的人都能直接看到密码；仅建议本机单人使用。</div>
+  <h2>用户管理 <small>（管理员可创建/重置密码/启停）</small></h2>
+  <div class="banner warn">密码按<b>明文</b>存储：任何能读到数据库或备份的人都能直接看到密码；仅建议本机单人使用。</div>
   <table class="table table-hover align-middle mb-0">
     <thead><tr><th>#</th><th>用户名</th><th>角色</th><th>状态</th><th>密码</th><th>创建人</th><th>最近登录</th><th></th></tr></thead>
     <tbody>

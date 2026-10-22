@@ -16,13 +16,13 @@
         <li>知识库/黑话/表情库注入，管理员私聊可改配置</li>
       </ul>
     </div>
-    <div class="login-brand-foot">Flask · 仅 HTTP · 21001</div>
+    <div class="login-brand-foot">服务运行中</div>
   </aside>
 
   <div class="login-panel">
     <form class="card login" method="post" action="/login">
       <h1>登录</h1>
-      <p class="hint">账号来自知识库用户表 <code>kb_user</code>，与管理端共用。</p>
+      <p class="hint">账号由管理员统一创建，与管理端共用。</p>
       {% if error %}<p class="error">{{ error }}</p>{% endif %}
       <label>用户名
         <input class="form-control" name="username" autocomplete="username" autofocus required>

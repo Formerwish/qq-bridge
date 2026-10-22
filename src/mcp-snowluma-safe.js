@@ -79,10 +79,8 @@ function unquoteJsonString(value) {
   return value;
 }
 
-// 说明：本文件曾经有一对 escapeCqText() / messageSegments()，用于在 MCP 侧构造消息段。
-// 它们从来没有被任何工具调用（发送一律走桥接的 /api/send/*，由桥接统一构造文本段并做
-// CQ 转义，见 bridge.js 的 onebotSend），属于"看起来在防护、实际是死代码"的假安全。
-// 这里直接删除，避免以后有人以为 MCP 侧还有一道 CQ 转义而放松桥接那一层。
+// 本文件不构造消息段、不做 CQ 转义：发送一律走桥接的 /api/send/*，由桥接统一构造文本段并做
+// CQ 转义（见 bridge.js 的 onebotSend）。不要在这里另起一套「看起来在防护」的假安全层。
 
 async function onebot(action, params = {}) {
   const { httpUrl, token } = getOneBotConfig();
@@ -104,7 +102,7 @@ async function onebot(action, params = {}) {
 }
 
 // 桥接控制台/内部 Agent API 访问：仿真模式的状态工具都通过这里读写桥接内存态。
-// 地址来自 config.json 的 consoleUrl（新）/ consolePort（旧）：监听 0.0.0.0 时用 127.0.0.1 连。
+// 地址来自 config.json 的 consoleUrl（优先）/ consolePort（兼容）：监听 0.0.0.0 时用 127.0.0.1 连。
 function agentApiBase() {
   const c = getConfig();
   return resolveConsoleEndpoint({ consoleUrl: c.consoleUrl, consolePort: c.consolePort }).clientUrl;
@@ -135,7 +133,6 @@ function readConsoleToken() {
  *
  * 为什么必须有：桥接个别分支会回一个**对象**（例如 `{code, message}`），直接
  * `new Error(obj)` 会把它 String 成 "[object Object]" —— 模型和运维都读不到任何信息。
- * r3 的已知未修项里就记着 `qq_wait_for_messages` 出现过 `error: "\"Error: [object Object]\""`。
  */
 function errorText(value, fallback) {
   if (typeof value === 'string' && value.trim()) return value.trim();
@@ -182,9 +179,8 @@ function agentHeaders(extra = {}) {
     ...(extra ?? {})
   };
   // 声明「这是一次智能体调用」。桥接据此把「没带会话令牌」判定为**拒绝**，而不是
-  // 退化成「管理端全权」——所以这个头绝不能随 token 一起被省略。历史上 331/355/379/877
-  // 行用 `...(token ? {headers:{...}} : {})` 把整个头省掉了，于是「模型漏传 token」
-  // 不是被拒绝，反而提权成控制台权限（confused deputy）。
+  // 退化成「管理端全权」——所以这个头绝不能随 token 一起被省略：省掉它，「模型漏传
+  // token」反而提权成控制台权限（confused deputy）。
   // 令牌本身仍然只在真有时才发：/api/status 的模式探测（legacyReadToolAllowed）本来就是
   // 无令牌调用，桥接对它单独放行并按最小对象返回。
   headers['x-agent-call'] = '1';
@@ -198,7 +194,7 @@ function agentHeaders(extra = {}) {
  * 而 `qq_wait_for_messages` 的常规用法就是 `timeoutMs=300000` 的沉睡前观察 ——
  * 客户端会在第 301 秒以 `fetch failed / Headers Timeout Error` 断掉，桥接侧的
  * 长轮询却还在跑满自己的预算：AI 拿不到结果只能重试，而 `activeWaits` 仍占着会话
- * （重新等待被 429），于是空转烧 token（见 issue #24）。`node:http` 没有默认响应超时，
+ * （重新等待被 429），于是空转烧 token。`node:http` 没有默认响应超时，
  * 超时完全由这里的计时器按调用方预算控制。
  */
 function agentApiLongPoll(path, init = {}) {
@@ -278,16 +274,16 @@ function agentApiLongPoll(path, init = {}) {
 
 async function authorizeRead(key) {
   // 会话令牌必须显式携带：桥接已把空令牌的请求一律拒绝（避免把该端点变成免鉴权入口）。
-  // 旧只读工具没有令牌，因此它们改由 legacyReadToolAllowed() 做模式判定，不再调用本函数。
+  // 只读工具没有令牌，因此它们由 legacyReadToolAllowed() 做模式判定，不走本函数。
   throw new Error('旧只读工具没有会话令牌；请使用带会话令牌的 v2 读工具');
 }
 
-// 旧只读工具（qq_status 之外的 qq_list_groups / qq_get_group_members / qq_get_group_history）
+// 只读工具（qq_status 之外的 qq_list_groups / qq_get_group_members / qq_get_group_history）
 // 没有会话令牌，因此**只能在封闭 agent（管理员私聊）里使用**。
 //
 // 这里用「确认是 closed-agent 才放行」的白名单写法，而不是「看到 reserved2 就拒绝」的黑名单写法：
 // 桥接的 /api/status 在「带 agent 令牌」时返回的是最小状态对象（不含 mode 字段），
-// 用 `status?.mode === 'reserved2'` 判断会得到 undefined ⇒ 黑名单判定为假 ⇒ 旧工具被放行，
+// 用 `status?.mode === 'reserved2'` 判断会得到 undefined ⇒ 黑名单判定为假 ⇒ 工具被放行，
 // 等于在仿真模式下把白名单群名、群成员名单注入模型上下文。
 async function legacyReadToolAllowed() {
   const status = await agentApi('/api/status');
@@ -332,11 +328,11 @@ const TOOL_CONFIG_FLAGS = {
   qq_admin_config: 'adminConfig',
   qq_send_voice: 'sendVoice',
   qq_list_voices: 'sendVoice',
-  // 下面这些曾经漏登记。漏一个不是"多注册一个工具"那么轻：桥接那边按 `v2ToolEnabled(flag)`
+  // 下面的工具必须逐个登记。漏一个不是"多注册一个工具"那么轻：桥接那边按 `v2ToolEnabled(flag)`
   // 在**调用期**一律 403，而这里不登记就等于"控制台显示已关闭、模型每次请求仍收到它的完整
-  // 描述与参数 schema，然后调用它、再拿到 403"——既白烧 token（本文件开头 176 行起就是为省这份
-  // token 才改注册期过滤的），又诱导模型误调。`qq_set_sticker_remark` 默认就是 `false`
-  // （见 bridge.js 的 socialV2.tools 默认表），所以此前它一直是"默认关闭却仍然可见"。
+  // 描述与参数 schema，然后调用它、再拿到 403"——既白烧 token（注册期过滤就是为了省这份
+  // token），又诱导模型误调。`qq_set_sticker_remark` 默认就是 `false`
+  // （见 bridge.js 的 socialV2.tools 默认表），不登记就会变成"默认关闭却仍然可见"。
   qq_send_poke: 'sendPoke',
   qq_set_group_card: 'setGroupCard',
   qq_set_profile: 'setProfile',
@@ -476,7 +472,7 @@ server.tool(
       const cleanMessage = unquoteJsonString(message);
       const data = await agentApi('/api/send/group', {
         method: 'POST',
-        // token 既放 body（兼容旧调用）又放 header：桥接的「agent 流量」判定基于 header，
+        // token 既放 body 又放 header（body 那份保留给按 body 读 token 的调用方）：桥接的「agent 流量」判定基于 header，
         // 只带 body 会让这条请求在桥接眼里像控制台请求，绕过 agent 专用的闸门与审计。
         ...(token ? { headers: { 'x-agent-token': token } } : {}),
         body: JSON.stringify({ groupId: String(groupId), message: cleanMessage, replyToMessageId, token: token || undefined })

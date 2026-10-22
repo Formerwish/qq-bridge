@@ -47,7 +47,7 @@ function sampleKeyOf(sessionId, turn, step, retry) {
  *
  * 导出给离线 fixture 复用：控制台走势图的示例数据必须和生产用**同一套桶宽**，
  * 否则「近 7 天」在离线预览里和生产里会是两种粒度，预览就失去意义了
- * （这类两边各写一份常量的漂移，正是这次体检里反复出现的问题）。
+ * （两边各写一份常量必然漂移，所以只保留这一份）。
  */
 export const BUCKET_LADDER_MS = [
   5 * 60 * 1000, 15 * 60 * 1000, 30 * 60 * 1000,
@@ -358,9 +358,9 @@ export function createTokenLedger({
    * 被淘汰的累计桶是否已经被更**新的投影基线**整块覆盖。
    *
    * 为什么必须判断：基线（session/follow 快照的 tokenUsage）本身就是"整条会话日志"的
-   * 权威累计，包含 seq <= asOfSeq 的全部事件；而淘汰桶没有 seq，旧代码无条件把它和基线
-   * 相加 —— 一旦重连后拿到的基线覆盖了被淘汰的采样，这部分 token 与花费就被算了两遍
-   * （实测 +33%，且只有 reset() 能清掉）。
+   * 权威累计，包含 seq <= asOfSeq 的全部事件；而淘汰桶没有 seq，无条件把它和基线
+   * 相加时，一旦重连后拿到的基线覆盖了被淘汰的采样，这部分 token 与花费就被算了两遍
+   * （且只有 reset() 能清掉）。
    */
   function evictionCovered(entry) {
     if (!entry) return false;
@@ -500,9 +500,9 @@ export function createTokenLedger({
    * 单遍索引：一次扫过所有采样，算出每个会话需要的全部聚合量。
    *
    * 为什么必须这么写：控制台每 3 秒拉一次 `/api/tokens/summary`，而它跑在**和 QQ 事件
-   * 同一个事件循环**里。原先 summary 对每个会话都重扫一遍全部采样（O(会话数 × 采样数)，
+   * 同一个事件循环**里。若对每个会话都重扫一遍全部采样（O(会话数 × 采样数)，
    * 而且 sessionTotals/sessionCost/turnRows 各扫一遍 = 3 倍），几千条采样、几十个会话
-   * 就是百万级迭代。这里压成单遍 O(采样数)。
+   * 就是百万级迭代。所以压成单遍 O(采样数)。
    *
    * 基线单独计价（它没有逐时明细，只能整体按快照时刻的峰谷算），并只把
    * `seq > 基线 seq` 的采样算进「权威累计」，避免和基线重复计费。
@@ -779,10 +779,9 @@ export function createTokenLedger({
     let estimated = false;
     let countedSamples = 0;
     // 逐桶的「轮次」去重集合（键 = sessionId|turn）。
-    // steps 数的是计费请求（同一回合的多个 step / 重试各算一条），turns 数的是真正的对话轮次；
-    // 旧代码把去重集合的键写成 sampleKeyOf(sid, turn, step, retry) —— 那**正是 samples 的键**，
-    // 遍历 samples 时每个键天然唯一，去重永不命中，于是 row.turns 恒等于 row.steps：
-    // 图上标的「轮次」其实一直是「请求数」，且这层去重是纯粹的死代码。
+    // steps 数的是计费请求（同一回合的多个 step / 重试各算一条），turns 数的是真正的对话轮次。
+    // 键**不能**用 sampleKeyOf(sid, turn, step, retry)：那正是 samples 的键，遍历 samples 时
+    // 每个键天然唯一，去重永不命中，于是 row.turns 恒等于 row.steps，图上标的「轮次」就变成了「请求数」。
     const turnSeen = new Set();
     const rowTurnSeen = rows.map(() => new Set());
     // 权威总额（含窗口之外）的三个组成部分，按 summary() 的同一口径在**同一次遍历**里累加：
@@ -850,9 +849,9 @@ export function createTokenLedger({
     }
     // 时间轴之外的那部分（更早的回合 / 投影基线覆盖的历史）。
     //
-    // 旧实现在这里调 summary({ limit: 1 }) 只为拿一个总额 —— 那是又一次 buildIndex()（全量采样、
-    // 每条约一次 priceUsage、还建两层 Map）加逐会话聚合，把控制台每 3 秒轮询一次的最热端点成本
-    // 直接翻倍，也违背了本函数头「单遍扫描」的约定。现在用上面同一次遍历累出的权威总额。
+    // 总额用上面同一次遍历累出的权威总额：另外调一次 summary({ limit: 1 }) 只为拿一个总额，
+    // 会带来又一次 buildIndex()（全量采样、每条约一次 priceUsage、还建两层 Map）加逐会话聚合，
+    // 把控制台每 3 秒轮询一次的最热端点成本直接翻倍，也违背了本函数头「单遍扫描」的约定。
     const ledgerTokens = totalTokensOf(ledgerBuckets);
     return {
       ok: true,

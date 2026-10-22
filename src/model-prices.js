@@ -276,15 +276,3 @@ export function addBuckets(a, b) {
     reasoning: (a?.reasoning ?? 0) + (b?.reasoning ?? 0)
   };
 }
-
-/** 桶相减（用于「基线之后」的增量），逐桶下限为 0。 */
-export function subBuckets(a, b) {
-  const s = (x, y) => Math.max(0, (x ?? 0) - (y ?? 0));
-  return {
-    cacheMiss: s(a?.cacheMiss, b?.cacheMiss),
-    cacheHit: s(a?.cacheHit, b?.cacheHit),
-    cacheWrite: s(a?.cacheWrite, b?.cacheWrite),
-    output: s(a?.output, b?.output),
-    reasoning: s(a?.reasoning, b?.reasoning)
-  };
-}

@@ -70,7 +70,7 @@ def save():
                     continue
                 pct = float(raw)
                 if pct < 0 or pct > 100:
-                    raise ValueError(f"概率必须在 0~100 之间：{path}")
+                    raise ValueError("概率必须在 0~100 之间")
                 updates[path] = pct / 100
             elif kind == "number":
                 raw = raw.strip()
@@ -91,7 +91,7 @@ def save():
         result = control.config_save(updates)
         msg = f"已热更 {len(result.get('applied') or [])} 项"
         if result.get("requiresRestart"):
-            msg += "；需重启桥接：" + ", ".join(result["requiresRestart"])
+            msg += f"；其中 {len(result['requiresRestart'])} 项需重启桥接后生效（配置页带「需重启」标记）"
         flash(msg, "ok")
     except control.BridgeError as exc:
         flash(f"保存失败：{exc}", "error")

@@ -67,7 +67,7 @@ TOOL_DEFS: list[dict] = [
     ("setGroupCard", "改群名片", "qq_set_group_card", "admin", "修改机器人在当前群的名片", True),
     ("setProfile", "改资料卡/昵称", "qq_set_profile", "admin", "改昵称/个性签名", True),
     ("usage", "用量查询", "qq_usage", "admin", "查 token 用量与估算费用", True),
-    ("adminConfig", "管理员配置", "qq_admin_config", "admin", "读写 config.toml（敏感项需重启）", True),
+    ("adminConfig", "管理员配置", "qq_admin_config", "admin", "读写配置（敏感项需重启）", True),
 ]
 
 
@@ -124,11 +124,11 @@ def save():
     except config_edit.ConfigEditError as exc:
         flash(f"写入配置失败：{exc}", "error")
         return redirect(url_for("tools.index"))
-    hint = "已写入 config.toml"
+    hint = "已写入配置"
     try:
         control.reload_config()
         hint += "，桥接已热重载"
     except control.BridgeError as exc:
         hint += f"；桥接未重载（{exc}），下次启动生效"
-    flash(f"{hint}。关闭工具对 MCP 完全生效需重启 DSH。", "ok")
+    flash(f"{hint}。关闭工具需重启 DSH 才完全生效。", "ok")
     return redirect(url_for("tools.index"))

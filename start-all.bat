@@ -6,7 +6,7 @@ cd /d "%~dp0"
 echo ============================================================
 echo  qq-bridge 一键启动：桥接 + Flask 控制台
 echo  - 已在运行的组件会自动跳过
-echo  - 每个组件一个窗口，桥接可关窗口停止；控制台无窗口（日志写文件）
+echo  - 桥接与控制台各开一个窗口，关闭窗口即停止对应组件（控制台退出会自动重启）
 echo ============================================================
 echo.
 
@@ -21,8 +21,7 @@ if errorlevel 1 (
 netstat -ano | findstr "LISTENING" | findstr ":21001 " >nul
 if errorlevel 1 (
   echo [start-all] 启动控制台...
-  rem 用 pythonw 启动：无控制台窗口；日志写 state\web-console.log
-  start "" /B /D "%~dp0web" ".venv\Scripts\pythonw.exe" app.py
+  start "qq-bridge 控制台" /D "%~dp0web" cmd /k "run.bat"
 ) else (
   echo [start-all] 控制台已在运行（21001），跳过。
 )

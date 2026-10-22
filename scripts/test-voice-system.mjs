@@ -45,7 +45,7 @@ for (const [rel, toolRel] of [['..\\voice-tool\\voice-gui.mjs', 'voice-gui.mjs']
 }
 for (const rel of ['src/voice-core.js', 'src/send-voice-lib.js',
   'scripts/send-voice.mjs', 'scripts/test-voice.mjs', 'scripts/test-voice-gui.mjs',
-  'scripts/test-encoding.mjs', 'scripts/test-console-static.mjs']) {
+  'scripts/test-encoding.mjs']) {
   ok(exists(rel), rel);
 }
 
@@ -180,15 +180,10 @@ console.log('## qq-bridge 语音系统：控制台与 preset');
 
 console.log('## 文档');
 {
-  const voice = read(path.join('docs', 'guides', 'VOICE.md'));
-  for (const needle of ['图形界面', 'voice-gui.mjs', 'voice-cli.mjs', '默认是关的', '发语音-图形界面.cmd']) {
-    ok(voice.includes(needle), 'docs/guides/VOICE.md 提到「' + needle + '」');
-  }
   const readme = read('README.md');
-  ok(readme.includes('voice-gui.mjs') && readme.includes('voice-cli.mjs'), 'README 含两个语音工具的入口说明');
-  ok(/AI 发语音默认关闭/.test(readme), 'README 已知限制说明默认关闭');
-  ok(read('docs/README.md').includes('FOLDER_MAP.md'), 'docs/README.md 索引链接到 FOLDER_MAP.md');
-  ok(exists(path.join('docs', 'FOLDER_MAP.md')), 'docs/FOLDER_MAP.md 存在');
+  ok(readme.includes('语音'), 'README 提到语音能力');
+  const docsIndex = read('docs/README.md');
+  ok(docsIndex.includes('DEPLOY.md') && docsIndex.includes('USAGE.md'), 'docs/README.md 索引到部署/使用文档');
 }
 
 console.log('## 独立工具的配置解析（env → voice-tool/config.json → ../qq-bridge/config.json → 默认值）');

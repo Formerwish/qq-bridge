@@ -6,7 +6,7 @@
 // - 查询词做基础清洗：去 CQ 码、控制字符、超长截断。
 // - 搜索：优先走 **DSH 同一路 DeepSeek 联网搜索**（src/web-search.js：同一端点/模型/
 //   服务端 web_search 工具，凭据取 config/env/DSH 的 .credentials.yaml），
-//   不可用时回退 Bing（RSS 优先）。搜索词不再默认发给 Bing。
+//   不可用时回退 Bing（RSS 优先）。搜索词不默认发给 Bing。
 // - `web_fetch` 仅允许 http/https：
 //   - 禁止 URL 内嵌凭据；
 //   - 禁止 localhost / .local / 私有 IP / 环回 / 链路本地 / CGNAT 等内网地址；

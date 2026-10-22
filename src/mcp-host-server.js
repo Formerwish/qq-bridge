@@ -4,10 +4,10 @@
 // 工具：
 //   snowluma_status   —— 检查网关是否在线（只读：HTTP get_login_info）与账号信息
 //
-// ── 为什么这里**没有**启停 SnowLuma 的工具（2026-09-20 移除，不要加回来）────────────
+// ── 这里**不提供**启停 SnowLuma 的工具（也不要加回来）───────────────────────
 //
-// 曾经有 `start_snowluma` / `stop_snowluma`（`spawn launcher.bat` / `taskkill`），默认关闭、
-// 需要 `snowluma.allowProcessControl: true` 才注册。它们被移除，理由不是"危险"，而是**许可**：
+// 进程控制类的工具（`start_snowluma` / `stop_snowluma`，实现会是 `spawn launcher.bat` /
+// `taskkill`）一律不注册，理由不是"危险"，而是**许可**：
 //
 //   SnowLuma EULA §5.4（中文为准）：「除事先取得著作权人的书面授权外，您仅可为 LICENSE 允许的
 //   非商业用途，以专有组件随本软件提供的形式运行该组件；不得复制、修改、单独再分发或再许可该组件。
@@ -17,7 +17,7 @@
 // 原生组件是**专有组件**；由本程序**程序化启动/结束**它，落在"通过自动化脚本部署"的射程内。
 // 即便是"用户已装好、我们帮忙拉起"，也不值得为这点便利去踩一条需要书面授权的条款。
 //
-// 设计不变量 L6（见规划集 QSH_PLAN.md §6.0）：**QSH 只探测、不部署**——
+// 设计不变量 L6：**本程序只探测、不部署**——
 // 永不安装、复制、打包或自动部署 SnowLuma 及其原生组件，也不程序化启停其进程。
 // 用户在 QQ 侧不可用时得到的应该是**可操作的提示**（"请自行启动 SnowLuma"），而不是被代劳。
 import fs from 'node:fs';
@@ -79,7 +79,7 @@ server.tool(
   async () => {
     const hc = getHostConfig();
     const info = await gatewayInfo();
-    // 只读工具：不再暴露本机路径/PID（那需要进程控制能力，而该能力已被移除）。
+    // 只读工具：不暴露本机路径/PID（那需要进程控制能力，本服务不提供）。
     const payload = { ...info };
     if (info.reachable === false) {
       payload.hint = 'SnowLuma 网关不可达。请自行启动 SnowLuma（本程序不代装、不代启，原因见项目文档的合规说明 L6）。'

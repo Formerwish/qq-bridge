@@ -9,8 +9,8 @@
       location.href = '/login?next=' + encodeURIComponent(location.pathname);
       throw new Error('未登录');
     }
-    const data = await resp.json().catch(() => ({ ok: false, error: '响应不是 JSON' }));
-    if (!resp.ok || data.ok === false) throw new Error(data.error || ('HTTP ' + resp.status));
+    const data = await resp.json().catch(() => ({ ok: false, error: '响应格式异常' }));
+    if (!resp.ok || data.ok === false) throw new Error(data.error || ('请求失败 ' + resp.status));
     return data;
   }
 

@@ -93,7 +93,8 @@ def set_status(sid: str):
     execute("UPDATE kb_slang SET status = %s, updated_ms = %s WHERE id = %s", (target, _now_ms(), sid))
     kb_common.log_slang_revision(sid, {"confirmed": "confirm", "rejected": "reject", "candidate": "candidate"}[target],
                                  row["content"], row, {**row, "status": target}, _actor())
-    flash(f"「{row['content']}」→ {target}", "ok")
+    label = {"confirmed": "已确认", "rejected": "已拒绝", "candidate": "候选"}.get(target, target)
+    flash(f"「{row['content']}」→ {label}", "ok")
     return redirect(url_for("slang.index", status=request.form.get("back") or "all"))
 
 
@@ -121,7 +122,7 @@ def learn():
         flash(f"触发学习失败：{exc}（桥接没在跑？）", "error")
         return redirect(url_for("slang.index"))
     if result.get("ok"):
-        detail = f"key={result.get('key')}" if result.get("key") else f"候选 {result.get('count', '?')} 条"
+        detail = f"编号 {result.get('key')}" if result.get("key") else f"候选 {result.get('count', '?')} 条"
         flash(f"已触发{'抽取' if mode == 'extract' else '研究'}（{detail}），结果稍后出现在候选里", "ok")
     else:
         flash(f"触发失败：{result.get('error') or result}", "error")

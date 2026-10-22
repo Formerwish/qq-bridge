@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}编辑黑话 · qq-bridge 控制台{% endblock %}
 {% block content %}
+{% set status_labels = {'candidate': '候选', 'confirmed': '已确认', 'rejected': '已拒绝'} %}
 <section class="panel">
   <h2>编辑黑话 <a class="btn btn-primary ms-auto" href="/slang">返回列表</a></h2>
   <form method="post" class="form wide">
@@ -12,7 +13,7 @@
     <label>风险/注意 <input class="form-control" name="risk" value="{{ row.risk or '' }}" maxlength="255"></label>
     <label>状态
       <select class="form-select" name="status">
-        {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if row.status == s else '' }}>{{ s }}</option>{% endfor %}
+        {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if row.status == s else '' }}>{{ status_labels.get(s, s) }}</option>{% endfor %}
       </select>
     </label>
     <div class="row-actions">

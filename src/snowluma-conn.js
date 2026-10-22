@@ -20,8 +20,8 @@ import path from 'node:path';
 /**
  * SnowLuma 主目录的常见位置。
  *
- * 同时接受两种 cfg 形状（踩过坑：图形界面传的是"窄对象"，没有 snowluma 这一层，
- * 于是 homeDir 被忽略、per-account token 一个都扫不到 → 换账号后界面显示未连接）：
+ * 同时接受两种 cfg 形状（图形界面传的是"窄对象"，没有 snowluma 这一层；
+ * 只读 sl.snowluma 会忽略 homeDir，导致 per-account token 一个都扫不到）：
  *   - 完整 config：{ snowluma: { homeDir, launcherPath, httpUrl, accessToken } }
  *   - 窄对象：    { homeDir, launcherPath, httpUrl, accessToken }
  */
@@ -74,7 +74,7 @@ export function readOneBotTokens(homeDir) {
   return out.sort((a, b) => a.uin.localeCompare(b.uin));
 }
 
-/** 兼容旧调用：只取 HTTP token 的扁平列表。 */
+/** 只取 HTTP token 的扁平列表（只关心 HTTP 侧的调用方用）。 */
 export function readOneBotHttpTokens(homeDir) {
   return readOneBotTokens(homeDir)
     .filter((a) => a.http)
@@ -179,13 +179,9 @@ function readDoc(cfgPath) {
     : JSON.parse(fs.readFileSync(cfgPath, 'utf8').replace(/^\uFEFF/, ''));
 }
 /**
- * 把当前有效的 token 写回 config.json（可选动作，供 qq-bridge 这类"必须持久化 token"的组件用）。
+ * 只写 snowluma.accessToken（可选动作，供 qq-bridge 这类"必须持久化 token"的组件用）。
  * 只在真的换过账号时才写，避免无谓改动。
- * 返回 { updated, from, to }。
- */
-/**
- * 只写 accessToken（兼容旧调用）。返回 { updated, from, to } —— 保留 from/to 是因为
- * 既有调用方与测试按这个形状断言（重构时改成 changed 曾把测试打红）。
+ * 返回 { updated, from, to } —— 调用方与测试按这个形状断言，不要改成别的字段名。
  */
 export function persistToken(cfgPath, newToken) {
   const old = String(readDoc(cfgPath).snowluma?.accessToken ?? '');
@@ -199,7 +195,7 @@ export function persistToken(cfgPath, newToken) {
  * 返回 { updated, changed: {...} }。
  */
 export function persistSnowLumaEndpoint(cfgPath, { accessToken, wsUrl, httpUrl } = {}) {
-  // TOML 权威 / JSON 兼容：迁移期两种路径都支持（测试用临时 JSON，桥接传 config.toml）。
+  // TOML 权威 / JSON 兼容：两种路径都支持（桥接传 config.toml，测试用临时 JSON）。
   const isToml = String(cfgPath).endsWith('.toml');
   let text = '';
   let hadBom = false;
@@ -224,9 +220,9 @@ export function persistSnowLumaEndpoint(cfgPath, { accessToken, wsUrl, httpUrl }
   consider('httpUrl', httpUrl);
   if (Object.keys(changed).length === 0) return { updated: false, changed: {} };
   cfg.snowluma = next;
-  // 原来 hadBom 只用于读、没用回写：用户文件带 UTF-8 BOM 时，我们改一个 token 就把 BOM 吞掉了
-  // —— 那是对用户文件的**字节级**静默改动（Windows 编辑器/工具常写 BOM），会让文件在 git 里
-  // 显示成整文件重写，也可能影响按字节读它的其它程序。只改该改的字段，编码原样保留。
+  // BOM 按**读到的样子**写回：用户文件带 UTF-8 BOM 时，改一个 token 就吞掉 BOM 属于对文件的
+  // **字节级**静默改动（Windows 编辑器/工具常写 BOM），会让文件在 git 里显示成整文件重写，
+  // 也可能影响按字节读它的其它程序。只改该改的字段，编码原样保留。
   if (isToml) {
     writeConfigDocument(cfg);
     return { updated: true, changed };

@@ -295,7 +295,7 @@ export function uniqueLibraryPath(voiceDir, filename) {
 //   · volume 倍数/分贝 —— volume=2.0 或 volume=3dB。直观，可复现。
 //   · loudnorm（智能音量）—— EBU R128 响度归一，把整体响度拉到目标 LUFS。
 //     对"录音忽大忽小/整体太小"最有效；但它会**大幅改变动态**，不适合有音乐/音效的内容。
-//     （曾经考虑 speechnorm，但它对非语音内容会过度抬升噪声，故不作为默认智能模式。）
+//     （不用 speechnorm：它对非语音内容会过度抬升噪声。）
 
 /** 音量倍数范围（1.0 = 原样）。QQ 语音常见需求是"调大"，所以上限给到 4 倍。 */
 export const VOLUME_MIN = 0.1;
@@ -332,12 +332,12 @@ export function resolveAudioProcessing({ volume = 1, normalize = false, loudness
  * 定位 ffmpeg：显式参数 → 环境变量 → PATH。
  *
  * 优先级按**实现**写文档：config.json 的 socialV2.voice.ffmpegPath 是"这台机器上 ffmpeg 在哪"的
- * 显式配置，比环境变量更具体，所以参数优先（旧注释写成"环境变量 → 参数"，与代码相反，
+ * 显式配置，比环境变量更具体，所以参数优先（写成"环境变量 → 参数"与代码相反，
  * 照着注释去改代码就会把用户的显式配置降级成环境变量兜底）。
  *
  * 只返回**确实存在**的文件路径。两个候选都没 stat 成功时返回裸命令名 'ffmpeg'，交给 spawn 按 PATH
- * 解析；旧实现在这种情况下返回 `candidates[0]`，哪怕那个路径根本不存在 —— 调用方于是拿到一句
- * 无信息量的"启动失败"，而不是 ENOENT 分支里那句"请设置 FFMPEG_PATH 或在 config.json 里指定"。
+ * 解析 —— 返回一个不存在的候选路径会让调用方拿到一句无信息量的"启动失败"，而不是 ENOENT
+ * 分支里那句"请设置 FFMPEG_PATH 或在 config.json 里指定"。
  */
 export function resolveFfmpeg({ ffmpegPath = null, envVar = 'FFMPEG_PATH' } = {}) {
   const candidates = [ffmpegPath, process.env[envVar]].filter(Boolean);
@@ -346,7 +346,7 @@ export function resolveFfmpeg({ ffmpegPath = null, envVar = 'FFMPEG_PATH' } = {}
       if (fs.statSync(c).isFile()) return c;
     } catch {}
   }
-  // PATH 里找（不真正执行，交给 spawn 时再报错）；绝不再回退到不存在的候选路径。
+  // PATH 里找（不真正执行，交给 spawn 时再报错）；绝不回退到不存在的候选路径。
   return 'ffmpeg';
 }
 
@@ -444,9 +444,8 @@ export async function processAudioVolume(file, {
 
   const detail = plan.loudness !== null
     ? `智能音量（响度归一 ${plan.loudness} LUFS）`
-    // 提升与压低必须分开说明。旧写法 `plan.volume > 1 ? A : A` 两个分支字面相同，把本来要表达的
-    // "放大 / 衰减"区别写没了：操作者看到"音量 30%"时分不清是配置生效了还是根本没生效，
-    // 排查语音太轻/太响时会白白绕一圈。
+    // 提升与压低必须分开说明：两个分支若字面相同，就把"放大 / 衰减"的区别写没了 —— 操作者看到
+    // "音量 30%"时分不清是配置生效了还是根本没生效，排查语音太轻/太响时会白白绕一圈。
     : (plan.volume > 1
       ? `音量提升至 ${Math.round(plan.volume * 100)}%`
       : `音量压低至 ${Math.round(plan.volume * 100)}%`);

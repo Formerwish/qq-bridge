@@ -1,10 +1,10 @@
-# qq-bridge 配置（TOML）
+﻿# qq-bridge 配置（TOML）
 #
 # 说明：
 #   - 这是唯一权威配置文件；程序保存（如 token 自愈、控制台改设置）会重新序列化本文件，
 #     手写注释可能丢失，重要说明请写进 docs 或 README。
 #   - 桥接启动时读取；标了「热重载」的项可在控制台/管理员工具里改完即时生效。
-#   - 各字段含义见 docs/guides/CONFIG.md（部署文档）。
+#   - 各字段含义见 docs/DEPLOY.md。
 sessionCwd = ""
 agentPreset = "qq-chat-v2"
 workspaceTitle = "QQ 聊天"

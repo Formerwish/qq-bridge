@@ -84,7 +84,7 @@ def update_wake(key: str):
         config["batchWindowMs"] = batch
     try:
         control.set_wake(key, config)
-        flash("唤醒配置已更新（confirmedBy=console，不再跟随全局默认值）", "ok")
+        flash("唤醒配置已更新（不再跟随全局默认值）", "ok")
     except control.BridgeError as exc:
         flash(f"更新唤醒配置失败：{exc}", "error")
     return redirect(url_for("sessions.index", key=key))

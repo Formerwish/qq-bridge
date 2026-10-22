@@ -20,7 +20,7 @@
         <td><code>{{ s.key }}</code></td>
         <td>{{ '群聊' if s.kind == 'group' else '私聊' }}</td>
         <td>{{ s.unread }}</td>
-        <td>{% if s.kind == 'private' %}即回（无合批/无概率）{% else %}{{ s.mode or '-' }}{% if s.pendingWake %} · 待唤醒{% endif %}{% endif %}</td>
+        <td>{% if s.kind == 'private' %}即回（无合批/无概率）{% else %}{{ (s.mode|mode_label) if s.mode else '-' }}{% if s.pendingWake %} · 待唤醒{% endif %}{% endif %}</td>
         <td>{{ s.wakeCount }}</td>
         <td><a href="/sessions?key={{ s.key|urlencode }}">详情</a></td>
       </tr>
@@ -49,8 +49,8 @@
       <h3>唤醒配置</h3>
       <label>模式
         <select class="form-select" name="mode">
-          <option value="diving" {{ 'selected' if detail.wakeConfig.mode == 'diving' else '' }}>潜水（diving）</option>
-          <option value="active" {{ 'selected' if detail.wakeConfig.mode == 'active' else '' }}>活跃（active）</option>
+          <option value="diving" {{ 'selected' if detail.wakeConfig.mode == 'diving' else '' }}>潜水</option>
+          <option value="active" {{ 'selected' if detail.wakeConfig.mode == 'active' else '' }}>活跃</option>
         </select>
       </label>
       <label>合并窗口（毫秒）

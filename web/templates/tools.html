@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}工具开关 · qq-bridge 控制台{% endblock %}
-{% block page_desc %}<p class="desc">按功能分组管理 AI 可用的 QQ 工具；关闭后桥接立即拒绝，MCP 侧完全生效需重启 DSH。</p>{% endblock %}
+{% block page_desc %}<p class="desc">按功能分组管理 AI 可用的 QQ 工具；关闭后桥接立即拒绝，完全生效需重启 DSH。</p>{% endblock %}
 {% block content %}
 <section class="panel tools-panel">
   <div class="tools-head">
     <div>
       <h2>工具开关 <small>{{ enabled }} / {{ total }} 已启用</small></h2>
-      <p class="hint">开关写入 <code>config.toml</code> 的 <code>[socialV2.tools]</code>，保存后桥接热重载；MCP 工具注册在启动时决定，<b>完全生效需重启 DSH</b>。</p>
+      <p class="hint">开关保存后桥接立即热重载；工具注册在启动时决定，<b>完全生效需重启 DSH</b>。</p>
     </div>
     <div class="tools-actions">
       <input class="form-control tool-search" id="tool-search" placeholder="搜索工具 / 说明">

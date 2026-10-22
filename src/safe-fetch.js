@@ -159,11 +159,6 @@ export async function resolveSafeAddresses(hostname) {
   return ordered.length ? ordered : [addresses[0].address];
 }
 
-export async function resolveSafeHost(hostname) {
-  const [first] = await resolveSafeAddresses(hostname);
-  return first;
-}
-
 export async function validateFetchUrl(raw) {
   let url;
   try {
@@ -295,7 +290,7 @@ function attemptOnce(url, address, limit, binary, budgetMs) {
 /**
  * 依次尝试已校验的地址（IPv4 优先，见 orderAddresses）。
  *
- * 单地址时沿用原来的「整个 20 秒总预算」，多地址时才启用单次尝试预算与失败切换：
+ * 单地址时仍用「整个 20 秒总预算」，多地址时才启用单次尝试预算与失败切换：
  * 这样「只有一个地址、对方慢慢滴流」仍然会等满总时限（由总 deadline 兜底），
  * 而「第一个地址是坏的 IPv6」不会再白等 20 秒。
  * 所有地址都失败时抛最后一个错误（保留原始错误文案，便于日志排查）。

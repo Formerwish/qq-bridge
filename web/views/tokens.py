@@ -31,9 +31,9 @@ def _load() -> dict:
     bad = 0
     last_t = None
     if not path.exists():
-        return {"ok": False, "reason": "账本文件不存在", "totals": totals, "lines": 0}
+        return {"ok": False, "reason": "暂无用量记录", "totals": totals, "lines": 0}
     if path.stat().st_size > MAX_BYTES:
-        return {"ok": False, "reason": "账本过大，已跳过解析", "totals": totals, "lines": 0}
+        return {"ok": False, "reason": "记录过大，已跳过解析", "totals": totals, "lines": 0}
     with path.open("r", encoding="utf-8", errors="replace") as fh:
         for raw in fh:
             raw = raw.strip()

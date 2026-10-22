@@ -86,7 +86,7 @@ def login_required(view):
         if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not csrf_ok():
             if request.path.startswith("/api/"):
                 return {"ok": False, "error": "CSRF 校验失败"}, 403
-            return render_template("error.html", message="CSRF 校验失败，请刷新页面后重试"), 403
+            return render_template("error.html", message="页面校验已过期，请刷新页面后重试"), 403
         return view(*args, **kwargs)
 
     return wrapper
@@ -129,7 +129,7 @@ def do_login():
             return render_template("login.html", next="", error=f"验证码错误，且失败次数过多，已封禁 {lock_seconds // 60} 分钟"), 429
         return render_template("login.html", next="", error="验证码错误"), 401
 
-    # 3) 账号密码（明文校验，不兼容旧哈希）
+    # 3) 账号密码（明文常量时间比较）
     username = (request.form.get("username") or "").strip()
     password = request.form.get("password") or ""
     user = query("SELECT id, username, password_hash, role, enabled FROM kb_user WHERE username = %s", (username,), one=True)
