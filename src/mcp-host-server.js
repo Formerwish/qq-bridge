@@ -21,6 +21,7 @@
 // 永不安装、复制、打包或自动部署 SnowLuma 及其原生组件，也不程序化启停其进程。
 // 用户在 QQ 侧不可用时得到的应该是**可操作的提示**（"请自行启动 SnowLuma"），而不是被代劳。
 import fs from 'node:fs';
+import { loadConfigDocument } from './config-store.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -31,9 +32,7 @@ const ROOT = path.resolve(__dirname, '..');
 
 function loadConfig() {
   try {
-    let text = fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8');
-    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-    return JSON.parse(text);
+    return loadConfigDocument().data;
   } catch {
     return {};
   }

@@ -7,6 +7,7 @@
 // 注意：**默认不真发语音**（真发会产生不可撤回的 QQ 消息）。要真发请用 CLI：
 //   node scripts/send-voice.mjs send "<音频>" group:<群号>
 import fs from 'node:fs';
+import { resolveConsoleEndpoint } from '../src/console-endpoint.js';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -330,7 +331,7 @@ if (process.env.QQ_BRIDGE_TEST_LIVE === '1') {
   } else {
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8'));
-    const port = Number(cfg.consolePort) || 3100;
+    const consoleBase = resolveConsoleEndpoint({ consoleUrl: cfg.consoleUrl, consolePort: cfg.consolePort }).clientUrl;
     let token = String(cfg.consoleToken ?? '').trim();
     if (!token) {
       try { token = fs.readFileSync(path.join(ROOT, 'state', 'console-token'), 'utf8').trim(); } catch {}
@@ -341,7 +342,7 @@ if (process.env.QQ_BRIDGE_TEST_LIVE === '1') {
     if (!target || !first) {
       ok(false, `live 前置条件不足（目标群 ${target ?? '无'}，语音库文件 ${first ?? '无'}）`);
     } else {
-      const res = await fetch(`http://127.0.0.1:${port}/api/voice/send`, {
+      const res = await fetch(`${consoleBase}/api/voice/send`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(token ? { 'x-console-token': token } : {}) },
         body: JSON.stringify({ target: `group:${target}`, file: first, dryRun: true }),

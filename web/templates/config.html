@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}高级配置 · qq-bridge 控制台{% endblock %}
+{% block page_desc %}<p class="desc">config.toml 全量字段（{{ total }} 项，已汉化）；绿色可热更，橙色需重启；白名单/峰谷/工具等请用对应页面。</p>{% endblock %}
+{% block content %}
+{% if error %}<div class="banner warn">桥接离线：{{ error }}</div>{% endif %}
+{% if groups %}
+<nav class="cfg-jump">
+{% for g in groups %}<a href="#cfg-{{ g.key|replace('.', '-') }}">{{ g.label }}<span>{{ g.fields|length }}</span></a>{% endfor %}
+</nav>
+<form method="post" action="/config" class="settings-form" id="config-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  {% for g in groups %}
+  <section class="settings-card" id="cfg-{{ g.key|replace('.', '-') }}">
+    <header class="settings-head">
+      <div><h2>{{ g.label }}</h2><p>{{ g.fields|length }} 项{% if g.restart_count %}（{{ g.restart_count }} 项需重启）{% endif %}</p></div>
+    </header>
+    <div class="config-grid">
+      {% for f in g.fields %}
+      <label class="settings-field config-field {{ 'field-restart' if f.restart else '' }}">
+        <span class="settings-label">{{ f.label }}
+          {% if f.restart %}<span class="cfg-badge warn">需重启</span>{% else %}<span class="cfg-badge hot">可热更</span>{% endif %}
+        </span>
+        {% if f.kind == 'bool' %}
+          <input type="hidden" name="kind.{{ f.path }}" value="bool">
+          <select class="form-select" name="f.{{ f.path }}">
+            <option value="on" {{ 'selected' if f.value else '' }}>开</option>
+            <option value="off" {{ 'selected' if not f.value else '' }}>关</option>
+          </select>
+        {% elif f.options %}
+          <input type="hidden" name="kind.{{ f.path }}" value="text">
+          <select class="form-select" name="f.{{ f.path }}">
+            {% for opt in f.options %}<option value="{{ opt }}" {{ 'selected' if f.value == opt else '' }}>{{ opt }}</option>{% endfor %}
+          </select>
+        {% elif f.kind == 'list' %}
+          <input type="hidden" name="kind.{{ f.path }}" value="list">
+          <input class="form-control" name="f.{{ f.path }}" value="{{ f.list_text }}" placeholder="逗号分隔">
+        {% elif f.kind == 'percent' %}
+          <input type="hidden" name="kind.{{ f.path }}" value="percent">
+          <div class="cfg-percent"><input class="form-control" type="number" step="0.01" min="0" max="100" name="f.{{ f.path }}" value="{{ f.value }}"><span>%</span></div>
+        {% elif f.kind == 'duration' %}
+          <input type="hidden" name="kind.{{ f.path }}" value="duration">
+          <input type="hidden" name="unit.{{ f.path }}" value="{{ f.unit }}">
+          <div class="cfg-percent"><input class="form-control" type="number" step="any" min="0" name="f.{{ f.path }}" value="{{ f.value }}"><span>{{ f.unit }}</span></div>
+        {% elif f.kind == 'number' %}
+          <input type="hidden" name="kind.{{ f.path }}" value="number">
+          <input class="form-control" type="number" step="any" name="f.{{ f.path }}" value="{{ f.value }}">
+        {% else %}
+          <input type="hidden" name="kind.{{ f.path }}" value="text">
+          <input class="form-control" name="f.{{ f.path }}" value="{{ f.value }}">
+        {% endif %}
+      </label>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+  <div class="settings-foot">
+    <button class="btn btn-primary" type="submit">保存配置</button>
+    <a class="btn btn-outline-secondary" href="/config">重置</a>
+    <span class="settings-foot-hint">"需重启"项会写入文件但不立即生效；其余保存后立即热更。</span>
+  </div>
+</form>
+{% else %}
+<p class="empty">桥接离线，无法读取配置。</p>
+{% endif %}
+{% endblock %}

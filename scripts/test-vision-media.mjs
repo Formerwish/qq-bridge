@@ -4,6 +4,7 @@
 // 3. 若桥接运行中，校验 /api/images/message 端点可用（用二代 agent token）
 // 运行：node scripts/test-vision-media.mjs
 import fs from 'node:fs';
+import { resolveConsoleEndpoint } from '../src/console-endpoint.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { safeFetchBuffer } from '../src/safe-fetch.js';
@@ -52,7 +53,10 @@ const consoleTokenFile = path.join(ROOT, 'state', 'console-token');
 const socialV2File = path.join(ROOT, 'state', 'social-v2.json');
 if (fs.existsSync(consoleTokenFile) && fs.existsSync(socialV2File)) {
   try {
-    const consoleToken = fs.readFileSync(consoleTokenFile, 'utf8').trim();
+    const configuredToken = String(config.consoleToken ?? '').trim();
+    const consoleToken = /^[A-Za-z0-9_-]{16,128}$/.test(configuredToken)
+      ? configuredToken
+      : fs.readFileSync(consoleTokenFile, 'utf8').trim();
     const social = JSON.parse(fs.readFileSync(socialV2File, 'utf8'));
     const conv = social?.conversations ? Object.entries(social.conversations)[0] : null;
     if (conv) {
@@ -60,7 +64,7 @@ if (fs.existsSync(consoleTokenFile) && fs.existsSync(socialV2File)) {
       const agentToken = st?.agentToken;
       const messageId = st?.recentMessages?.find((m) => m && !m.isSelf)?.messageId || st?.recentMessages?.[0]?.messageId;
       if (agentToken && messageId) {
-        const url = `http://127.0.0.1:${config.consolePort || 3100}/api/images/message?key=${encodeURIComponent(key)}&messageId=${encodeURIComponent(String(messageId))}`;
+        const url = `${resolveConsoleEndpoint({ consoleUrl: config.consoleUrl, consolePort: config.consolePort }).clientUrl}/api/images/message?key=${encodeURIComponent(key)}&messageId=${encodeURIComponent(String(messageId))}`;
         const res = await fetch(url, { headers: { 'x-agent-token': agentToken, 'x-console-token': consoleToken }, signal: AbortSignal.timeout(10000) });
         const body = await res.json().catch(() => ({}));
         check('桥接 /api/images/message 端点可访问', res.ok === true && body.ok === true, `HTTP ${res.status}`);

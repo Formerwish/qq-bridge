@@ -22,6 +22,7 @@
 // - 响应体有大小上限；请求有总超时；查询词在 MCP 层已清洗。
 // - Bing 走 safe-fetch（SSRF 防护 + 多地址故障切换）。
 import fs from 'node:fs';
+import { loadConfigDocument } from './config-store.js';
 import os from 'node:os';
 import path from 'node:path';
 import https from 'node:https';
@@ -62,7 +63,7 @@ function num(value, fallback, min, max) {
 export function loadSearchConfig(root) {
   let file = {};
   try {
-    const text = fs.readFileSync(path.join(root, 'config.json'), 'utf8');
+    const text = JSON.stringify(loadConfigDocument(path.join(root, 'config.toml')).data);
     file = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
   } catch {}
   const raw = file?.webSearch && typeof file.webSearch === 'object' && !Array.isArray(file.webSearch) ? file.webSearch : {};

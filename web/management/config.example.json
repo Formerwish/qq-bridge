@@ -1,0 +1,27 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 3210,
+    "secretKey": "",
+    "allowedIps": []
+  },
+  "bridge": {
+    "consoleUrl": "http://127.0.0.1:3100",
+    "consoleToken": "",
+    "slangJson": "E:\\qq-bridge-0.2.0-r4\\state\\slang.json"
+  },
+  "mysql": {
+    "host": "127.0.0.1",
+    "port": 10708,
+    "user": "qqkb_ro",
+    "password": "qqkb_ro_123456",
+    "database": "qq_bridge_kb",
+    "charset": "utf8mb4"
+  },
+  "limits": {
+    "titleMax": 128,
+    "keywordsMax": 255,
+    "bodyMax": 5000,
+    "topicMax": 32
+  }
+}

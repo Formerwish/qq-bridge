@@ -14,6 +14,7 @@
 //
 // 这样换账号后无需手改任何配置，工具自动跟上。
 import fs from 'node:fs';
+import { loadConfigDocument, writeConfigDocument } from './config-store.js';
 import path from 'node:path';
 
 /**
@@ -172,6 +173,11 @@ export async function discoverSnowLumaConnection({
   };
 }
 
+function readDoc(cfgPath) {
+  return String(cfgPath).endsWith('.toml')
+    ? loadConfigDocument(cfgPath).data
+    : JSON.parse(fs.readFileSync(cfgPath, 'utf8').replace(/^\uFEFF/, ''));
+}
 /**
  * 把当前有效的 token 写回 config.json（可选动作，供 qq-bridge 这类"必须持久化 token"的组件用）。
  * 只在真的换过账号时才写，避免无谓改动。
@@ -182,9 +188,7 @@ export async function discoverSnowLumaConnection({
  * 既有调用方与测试按这个形状断言（重构时改成 changed 曾把测试打红）。
  */
 export function persistToken(cfgPath, newToken) {
-  let text = fs.readFileSync(cfgPath, 'utf8');
-  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-  const old = String(JSON.parse(text).snowluma?.accessToken ?? '');
+  const old = String(readDoc(cfgPath).snowluma?.accessToken ?? '');
   const r = persistSnowLumaEndpoint(cfgPath, { accessToken: newToken });
   return { updated: r.updated, from: old, to: newToken };
 }
@@ -195,11 +199,17 @@ export function persistToken(cfgPath, newToken) {
  * 返回 { updated, changed: {...} }。
  */
 export function persistSnowLumaEndpoint(cfgPath, { accessToken, wsUrl, httpUrl } = {}) {
-  let text = fs.readFileSync(cfgPath, 'utf8');
-  // 读的时候必须吃掉 BOM，否则 JSON.parse 会抛「Unexpected token」。
-  const hadBom = text.charCodeAt(0) === 0xFEFF;
-  if (hadBom) text = text.slice(1);
-  const cfg = JSON.parse(text);
+  // TOML 权威 / JSON 兼容：迁移期两种路径都支持（测试用临时 JSON，桥接传 config.toml）。
+  const isToml = String(cfgPath).endsWith('.toml');
+  let text = '';
+  let hadBom = false;
+  if (!isToml) {
+    text = fs.readFileSync(cfgPath, 'utf8');
+    // 读的时候必须吃掉 BOM，否则 JSON.parse 会抛「Unexpected token」。
+    hadBom = text.charCodeAt(0) === 0xFEFF;
+    if (hadBom) text = text.slice(1);
+  }
+  const cfg = isToml ? loadConfigDocument(cfgPath).data : JSON.parse(text);
   const cur = cfg.snowluma ?? {};
   const next = { ...cur };
   const changed = {};
@@ -217,6 +227,10 @@ export function persistSnowLumaEndpoint(cfgPath, { accessToken, wsUrl, httpUrl }
   // 原来 hadBom 只用于读、没用回写：用户文件带 UTF-8 BOM 时，我们改一个 token 就把 BOM 吞掉了
   // —— 那是对用户文件的**字节级**静默改动（Windows 编辑器/工具常写 BOM），会让文件在 git 里
   // 显示成整文件重写，也可能影响按字节读它的其它程序。只改该改的字段，编码原样保留。
+  if (isToml) {
+    writeConfigDocument(cfg);
+    return { updated: true, changed };
+  }
   const serialized = JSON.stringify(cfg, null, 2) + '\n';
   fs.writeFileSync(cfgPath, hadBom ? `\uFEFF${serialized}` : serialized, 'utf8');
   return { updated: true, changed };

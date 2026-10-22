@@ -20,6 +20,7 @@ import {
   describeAudio, formatBytes, formatDuration, inspectAudio, listAudioFiles,
   parseTargetKey, resolveAudioSource
 } from '../src/send-voice-lib.js';
+import { resolveConsoleEndpoint } from '../src/console-endpoint.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -65,7 +66,8 @@ function loadConfig() {
 const cfg = loadConfig();
 const httpUrl = String(val('snowluma', cfg.snowluma?.httpUrl || 'http://127.0.0.1:3000')).replace(/\/+$/, '');
 const accessToken = String(val('token', cfg.snowluma?.accessToken || ''));
-const consolePort = Number(val('console-port', cfg.consolePort)) || 3100;
+const consoleEndpoint = resolveConsoleEndpoint({ consoleUrl: cfg.consoleUrl, consolePort: Number(val('console-port', cfg.consolePort ?? '')) || undefined });
+const consoleBase = consoleEndpoint.clientUrl;
 const consoleToken = String(
   val('console-token', cfg.consoleToken || process.env.QQ_CONSOLE_TOKEN || readConsoleTokenFile() || '')
 ).trim();
@@ -113,7 +115,7 @@ async function bridgeApi(pathname, init = {}) {
     ...(consoleToken ? { 'x-console-token': consoleToken } : {}),
     ...(init.headers ?? {})
   };
-  const res = await fetch(`http://127.0.0.1:${consolePort}${pathname}`, {
+  const res = await fetch(`${consoleBase}${pathname}`, {
     ...init,
     headers,
     signal: AbortSignal.timeout(init.timeoutMs ?? 60000)
@@ -270,7 +272,7 @@ async function cmdStatus() {
   console.log(`配置文件：${CONFIG_PATH}`);
   console.log(`  snowluma.httpUrl   = ${httpUrl}`);
   console.log(`  snowluma.accessToken = ${revealToken ? accessToken : maskToken(accessToken)}`);
-  console.log(`  桥接控制台         = http://127.0.0.1:${consolePort}`);
+  console.log(`  桥接控制台         = ${consoleBase}`);
   console.log(`  consoleToken       = ${revealToken ? consoleToken : maskToken(consoleToken)}`);
   console.log(`  语音库目录         = ${voiceDir}`);
   try {
@@ -283,7 +285,7 @@ async function cmdStatus() {
     const st = await bridgeApi('/api/status');
     console.log(`✅ 桥接在线：mode=${st.mode ?? '?'} role=${st.role ?? '?'} dshReady=${st.dshReady ?? '?'} paused=${st.socialV2Paused ?? '?'}`);
   } catch (error) {
-    console.log(`⚠️ 桥接不可达（http://127.0.0.1:${consolePort}）：${error?.message ?? error}`);
+    console.log(`⚠️ 桥接不可达（${consoleBase}）：${error?.message ?? error}`);
     console.log('   → 发送语音需要桥接在线（它负责白名单/限流/审计）。应急可用 --direct 直连网关（无闸门）。');
   }
 }

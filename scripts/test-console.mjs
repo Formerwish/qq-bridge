@@ -32,9 +32,9 @@ const ok = (name, cond, extra = '') => {
 };
 
 // 1. 页面
-const page = await fetch(BASE + '/', { headers: authHeaders });
+const page = await fetch(BASE + '/', { headers: authHeaders, redirect: 'manual' });
 const html = await page.text();
-ok('页面加载', page.status === 200 && html.includes('白名单 / 管理员') && html.includes('人格与角色') && html.includes('仿真提示词') && html.includes('测试发送'), `长度 ${html.length}`);
+  ok('旧页面已下线并跳转 Flask（302）', page.status === 302 && String(page.headers.get('location') || '').includes('3211'), `HTTP ${page.status} -> ${page.headers.get('location')}`);
 
 // 2. 角色列表
 let r = await api('/api/roles');

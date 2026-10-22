@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}工具开关 · qq-bridge 控制台{% endblock %}
+{% block page_desc %}<p class="desc">按功能分组管理 AI 可用的 QQ 工具；关闭后桥接立即拒绝，MCP 侧完全生效需重启 DSH。</p>{% endblock %}
+{% block content %}
+<section class="panel tools-panel">
+  <div class="tools-head">
+    <div>
+      <h2>工具开关 <small>{{ enabled }} / {{ total }} 已启用</small></h2>
+      <p class="hint">开关写入 <code>config.toml</code> 的 <code>[socialV2.tools]</code>，保存后桥接热重载；MCP 工具注册在启动时决定，<b>完全生效需重启 DSH</b>。</p>
+    </div>
+    <div class="tools-actions">
+      <input class="form-control tool-search" id="tool-search" placeholder="搜索工具 / 说明">
+      <button class="btn btn-outline-secondary" type="button" id="tools-on">全开</button>
+      <button class="btn btn-outline-secondary" type="button" id="tools-off">全关</button>
+      <button class="btn btn-primary" type="submit" form="tools-form">保存并热重载</button>
+    </div>
+  </div>
+
+  <form method="post" action="/tools" id="tools-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    {% for g in groups %}
+    <section class="tool-group" data-group="{{ g.key }}">
+      <h3>{{ g.label }} <span>{{ g.on }}/{{ g.tools|length }}</span></h3>
+      <div class="tool-grid">
+        {% for t in g.tools %}
+        <label class="tool-card {{ 'is-admin' if t.admin else '' }}" data-search="{{ t.title }} {{ t.tool }} {{ t.desc }} {{ g.label }}">
+          <div class="tool-top">
+            <span class="tool-title">{{ t.title }}</span>
+            <span class="switch"><input type="checkbox" name="{{ t.flag }}" {{ 'checked' if t.on else '' }}><i></i></span>
+          </div>
+          <code class="tool-id">{{ t.tool }}</code>
+          <p class="tool-desc">{{ t.desc }}</p>
+          {% if t.admin %}<span class="tool-tag">仅管理员</span>{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+    <div class="tools-save">
+      <button class="btn btn-primary" type="submit">保存并热重载</button>
+      <span class="muted small" id="tool-count">已启用 {{ enabled }} / {{ total }}</span>
+    </div>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const form = document.getElementById('tools-form');
+  if (!form) return;
+  const boxes = [...form.querySelectorAll('input[type="checkbox"][name]')];
+  const countEl = document.getElementById('tool-count');
+  const update = () => {
+    const on = boxes.filter((b) => b.checked).length;
+    if (countEl) countEl.textContent = `已启用 ${on} / ${boxes.length}`;
+  };
+  boxes.forEach((b) => b.addEventListener('change', update));
+  document.getElementById('tools-on')?.addEventListener('click', () => { boxes.forEach((b) => { b.checked = true; }); update(); });
+  document.getElementById('tools-off')?.addEventListener('click', () => { boxes.forEach((b) => { b.checked = false; }); update(); });
+
+  const search = document.getElementById('tool-search');
+  search?.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    form.querySelectorAll('.tool-card').forEach((card) => {
+      card.style.display = !q || card.dataset.search.toLowerCase().includes(q) ? '' : 'none';
+    });
+    form.querySelectorAll('.tool-group').forEach((group) => {
+      const any = [...group.querySelectorAll('.tool-card')].some((c) => c.style.display !== 'none');
+      group.style.display = any ? '' : 'none';
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}人格卡 · qq-bridge 控制台{% endblock %}
+{% block content %}
+{% if error %}<div class="banner warn">桥接离线：{{ error }}</div>{% endif %}
+
+<section class="panel">
+  <h2>人格卡 <small>（保存后下一条消息即生效；与"仿真预设"是两层）</small></h2>
+  {% if info %}
+  <p class="hint">当前人格：<b>{{ info.current or '（未设置）' }}</b> · 模式 {{ info.mode }} · 注入上限 {{ info.limits.injectMaxChars }} 字</p>
+  <table class="table table-hover align-middle mb-0">
+    <thead><tr><th>人格</th><th>字数（仿真实注入）</th><th>告警</th><th></th></tr></thead>
+    <tbody>
+    {% for role in info.roles %}
+      <tr class="{{ 'sel' if detail and role.name == detail.name else '' }}">
+        <td><a href="/roles?name={{ role.name|urlencode }}">{{ role.name }}</a><div class="muted small">{{ role.excerpt }}</div></td>
+        <td>{{ role.chars }}（{{ role.injectedV2 }}）{% if role.truncated %}<div class="warn-text">超上限会截断</div>{% endif %}</td>
+        <td>{{ role.warnings }}</td>
+        <td>
+          {% if role.name != info.current %}
+          <form method="post" action="/roles/current" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="name" value="{{ role.name }}">
+            <button class="btn btn-link btn-sm p-0" type="submit">设为当前</button>
+          </form>
+          {% else %}<span class="muted small">当前</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+{% if detail %}
+<section class="panel">
+  <h2>编辑：{{ detail.name }} <small>（{{ detail.content|length }} 字）</small></h2>
+  {% if detail.warnings %}
+  <div class="banner warn">
+    {% for w in detail.warnings %}<div>⚠️ {{ w }}</div>{% endfor %}
+  </div>
+  {% endif %}
+  <form method="post" action="/roles/save" class="form wide">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="name" value="{{ detail.name }}">
+    <textarea class="form-control" name="content" rows="26" class="mono">{{ detail.content }}</textarea>
+    <div class="row-actions">
+      <button class="btn btn-primary" type="submit">保存</button>
+      <span class="hint">仿真（工具模式）实注入 {{ detail.stats.v2 }} 字 · 文本模式 {{ detail.stats.v1 }} 字</span>
+    </div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

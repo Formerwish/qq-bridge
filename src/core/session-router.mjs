@@ -64,28 +64,29 @@ const ALL_MODES = Object.freeze([...SIMULATION_MODES, 'simulation', 'closed-agen
 
 /**
  * Which presets a mode may use. `closed-agent` intentionally allows only its own
- * closed preset; simulation allows the simulator presets. Anything else is
- * rejected so a typo or a stale config cannot attach an unexpected tool surface.
+ * closed preset; every simulation spelling allows the simulator preset. Anything
+ * else is rejected so a typo or a stale config cannot attach an unexpected tool
+ * surface.
  *
- * **One generation per spelling, on purpose.** `simulation` is the canonical
- * rename of `reserved2` (QSH_PLAN.md §2.1), so it is the entry that carries the
- * QSH names the plan installs — `qsh-sim` / `qsh-sim-v2` (ADR 0003 §决定 point 4)
- * — and `[0]` is the preset this layer emits by default, exactly as
- * QSH_PLAN.md §3.1 writes `"defaults": { "mode": "simulation", "preset":
- * "qsh-sim" }`. The legacy spellings keep the presets that are actually
- * installed today (`qq-chat` / `qq-chat-v2`), so a config written before the P3
- * rename stays loadable *and* `reserved2 + qsh-sim` stays a detectable mismatch
- * instead of silently resolving to a preset that deployment never installed.
- * Deployments that install a different generation pass their own table through
- * the `modePresets` option — that is why both lists exist rather than one.
+ * **One preset, several spellings.** The repo now ships a single QQ preset
+ * (`qq-chat-v2` — the tools-based simulation preset); the text-forwarding
+ * `qq-chat` preset was removed together with the first-generation social engine.
+ * The legacy mode spellings (`chat` / `reserved`) therefore resolve to the same
+ * preset instead of naming a preset that is no longer installed, which would make
+ * every session in those modes fail closed. `simulation` is the canonical rename
+ * of `reserved2` (QSH_PLAN.md §2.1), so it leads with the QSH names the plan
+ * installs — `qsh-sim` / `qsh-sim-v2` (ADR 0003 §决定 point 4) — and `[0]` is the
+ * preset this layer emits by default. Deployments that install a different
+ * generation pass their own table through the `modePresets` option — that is why
+ * both lists exist rather than one.
  */
 const DEFAULT_MODE_PRESETS = Object.freeze({
-  chat: Object.freeze(['qq-chat']),
-  reserved: Object.freeze(['qq-chat']),
+  chat: Object.freeze(['qq-chat-v2']),
+  reserved: Object.freeze(['qq-chat-v2']),
   reserved2: Object.freeze(['qq-chat-v2']),
   // `simulation` is the canonical spelling of `reserved2`. It leads with the
   // canonical preset names; `qq-chat-v2` stays accepted because that is the
-  // preset the still-legacy bridge actually installs for this mode.
+  // preset the bridge actually installs for this mode.
   simulation: Object.freeze(['qsh-sim', 'qsh-sim-v2', 'qq-chat-v2']),
   'closed-agent': Object.freeze(['qsh-closed']),
 });
@@ -384,7 +385,7 @@ export function migrateLegacyMode({ mode, ownerQQ, modePresets } = {}) {
     modePresets,
   });
   // 迁移事件没有"静默"分支：旧写法在 `mode === 'reserved2' && owner === null` 时返回 events: []，
-  // 而"老配置是二代仿真 + 从没配过 ownerQQ"恰恰是最常见的一次迁移 —— 也就是说最常见的迁移是唯一
+  // 而"老配置是仿真模式（reserved2） + 从没配过 ownerQQ"恰恰是最常见的一次迁移 —— 也就是说最常见的迁移是唯一
   // 不留审计记录的那种，与本模块"caller must persist the events"的契约直接矛盾：调用方按约定落盘，
   // 却什么都落不下来，事后无法回答"这批会话的默认模式是什么时候、按哪次迁移改的"。
   // （`closedAgentEnabled === false` 这一项对 reserved2 恒为真，所以那个条件实际只是在判断 owner === null。）

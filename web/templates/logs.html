@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}日志 · qq-bridge 控制台{% endblock %}
+{% block content %}
+{% if error %}<div class="banner warn">桥接离线：{{ error }}</div>{% endif %}
+<section class="panel">
+  <h2>桥接日志 <small>（最近 {{ lines }} 行，只读）</small>
+    <form method="get" action="/logs" class="inline right">
+      <select class="form-select" name="lines" onchange="this.form.submit()">
+        {% for n in [200, 500, 1000, 2000] %}
+        <option value="{{ n }}" {{ 'selected' if lines == n else '' }}>{{ n }} 行</option>
+        {% endfor %}
+      </select>
+    </form>
+  </h2>
+  {% if text %}
+  <pre class="logbox">{{ text }}</pre>
+  {% else %}
+  <p class="empty">暂无日志（桥接离线或日志为空）。</p>
+  {% endif %}
+</section>
+{% endblock %}

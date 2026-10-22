@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}注入预览 · 知识库{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>注入预览 <small>（模拟群消息命中，最多 {{ max_entries }} 条 / {{ max_chars }} 字）</small>
+    <a class="btn btn-primary ms-auto" href="/kb">返回知识库</a></h2>
+  <form method="post" class="form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label>模拟一条群消息
+      <textarea class="form-control" name="text" rows="3" placeholder="例如：机械师这皮肤怎么买？">{{ text }}</textarea>
+    </label>
+    <button class="btn btn-primary" type="submit">计算命中</button>
+  </form>
+
+  {% if text %}
+  <h3>命中的条目（{{ matched|length }}）</h3>
+  {% if matched %}
+  <table class="table table-hover align-middle mb-0">
+    <thead><tr><th>#</th><th>标题</th><th>关键词</th><th>优先级</th></tr></thead>
+    <tbody>
+    {% for row in matched %}
+      <tr><td class="muted">{{ row.id }}</td><td>{{ row.title }}</td><td class="muted small">{{ row.keywords }}</td><td>{{ row.priority }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">没有命中（不会注入任何资料）。</p>
+  {% endif %}
+
+  <h3>实际会注入给模型的块</h3>
+  {% if block %}
+  <pre class="logbox">{{ block }}</pre>
+  {% else %}
+  <p class="empty">空（没有命中或正文为空）。</p>
+  {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

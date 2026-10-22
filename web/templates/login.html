@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}登录 · qq-bridge 控制台{% endblock %}
+{% block content %}
+<section class="login-split">
+  <aside class="login-brand">
+    <div class="login-brand-top">
+      <span class="login-logo">🐋</span>
+      <span class="login-brand-name">qq-bridge <em>Pro</em></span>
+    </div>
+    <div class="login-brand-main">
+      <h2>QQ 群聊控制台</h2>
+      <p>桥接 · 会话 · 峰谷策略 · 知识库 · 表情 · 令牌，一处管理。</p>
+      <ul>
+        <li>仿真模式：AI 自主决定看/回/睡</li>
+        <li>峰谷时段自动切换回复概率与推理强度</li>
+        <li>知识库/黑话/表情库注入，管理员私聊可改配置</li>
+      </ul>
+    </div>
+    <div class="login-brand-foot">Flask · 仅 HTTP · 21001</div>
+  </aside>
+
+  <div class="login-panel">
+    <form class="card login" method="post" action="/login">
+      <h1>登录</h1>
+      <p class="hint">账号来自知识库用户表 <code>kb_user</code>，与管理端共用。</p>
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <label>用户名
+        <input class="form-control" name="username" autocomplete="username" autofocus required>
+      </label>
+      <label>密码
+        <input class="form-control" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <label>验证码（点击图片刷新）
+        <span class="captcha-row">
+          <input class="form-control" name="captcha" autocomplete="off" maxlength="4" required>
+          <img id="captcha-img" src="/captcha" alt="验证码" title="点击刷新"
+               onclick="this.src='/captcha?t=' + Date.now()">
+        </span>
+      </label>
+      <input type="hidden" name="next" value="{{ next or '' }}">
+      <button class="btn btn-primary" type="submit">登录</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

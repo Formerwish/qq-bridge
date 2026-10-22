@@ -66,3 +66,12 @@ docs/guides/VOICE.md
 # 语音库（用户个人音频素材，config.json 的 socialV2.voice.dir 指向此处）
 audio/
 
+# 权威配置（含 token / 白名单，不进仓库）；模板见 config.example.toml
+config.toml
+config.json.migrated
+config.json.bak-*
+
+# 控制台（Flask）虚拟环境与字节码
+web/.venv/
+__pycache__/
+*.pyc

@@ -23,7 +23,7 @@
   },
   "ownerQQ": null,
   "sessionCwd": "",
-  "agentPreset": "qq-chat",
+  "agentPreset": "qq-chat-v2",
   "workspaceTitle": "QQ 聊天",
   "allow": {
     "private": [],
@@ -37,7 +37,8 @@
   "ackMessage": "",
   "sendDelayMs": 300,
   "questionTimeoutMs": 300000,
-  "consolePort": 3100,
+  "consoleUrl": "http://127.0.0.1:3100",
+  "consoleAllowedHosts": [],
   "consoleToken": "",
   "pricing": {
     "models": {
@@ -64,46 +65,32 @@
       8
     ],
     "injectMax": 8,
-    "learnerPreset": "qq-chat",
+    "learnerPreset": "qq-chat-v2",
     "workspaceTitle": "QQ 黑话学习",
     "autoResearch": true
   },
-  "social": {
+  "kb": {
     "enabled": true,
-    "maxReplyChars": 500,
-    "mustReplyKeywords": [
-      "deepseek",
-      "小鲸鱼",
-      "大肥鱼",
-      "鲸鱼",
-      "d指导",
-      "在吗"
-    ],
-    "contextWindow": 20,
-    "triggerProbability": 0.1,
-    "activeCheckMinMs": 8000,
-    "activeCheckMaxMs": 30000,
-    "idleWindowMs": 360000,
-    "idleRetryProbability": 0.4,
-    "proactiveEnabled": true,
-    "proactiveIdleThresholdMs": 1800000,
-    "proactiveCheckMinMs": 2700000,
-    "proactiveCheckMaxMs": 5400000,
-    "proactiveProbability": 0.2,
-    "activeReplyDelayMinMs": 1000,
-    "activeReplyDelayMaxMs": 5000,
-    "activeDurationEnabled": true,
-    "activeDurationMinMs": 1200000,
-    "activeDurationMaxMs": 3000000,
-    "skipProbability": 0.05,
-    "surrenderProbability": 0,
-    "idleRetryWaitMs": 120000,
-    "burstEnabled": true,
-    "burstIntervalMinMs": 1000,
-    "burstIntervalMaxMs": 3000,
-    "longGapProbability": 0.2,
-    "longGapMinMs": 5000,
-    "longGapMaxMs": 10000
+    "mysql": {
+      "host": "127.0.0.1",
+      "port": 10708,
+      "user": "qqkb_bridge",
+      "password": "",
+      "database": "qq_bridge_kb",
+      "connectionLimit": 2,
+      "connectTimeoutMs": 3000
+    },
+    "cacheTtlMs": 60000,
+    "inject": {
+      "enabled": true,
+      "maxEntries": 2,
+      "maxChars": 800
+    },
+    "query": {
+      "maxResults": 5,
+      "previewChars": 400,
+      "timeoutMs": 2500
+    }
   },
   "socialV2": {
     "enabled": true,
@@ -139,6 +126,7 @@
       "setStickerRemark": false,
       "stickerNote": true,
       "collectSticker": true,
+      "kbSearch": true,
       "getSelfImage": true,
       "sendVoice": false
     },
@@ -254,7 +242,13 @@
     "media": {
       "maxBytes": 8388608,
       "maxPixels": 64000000,
-      "maxCount": 5
+      "maxCount": 5,
+      "gif": {
+        "enabled": true,
+        "frames": 9,
+        "cellPx": 224,
+        "onlyAnimated": true
+      }
     }
   },
   "webSearch": {

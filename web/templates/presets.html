@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}预设 · qq-bridge 控制台{% endblock %}
+{% block content %}
+{% if error %}<div class="banner warn">桥接离线：{{ error }}</div>{% endif %}
+<section class="panel">
+  <h2>仿真预设 <small>（只读；预设由 DSH 在会话创建时装配，改动需重启 DSH）</small></h2>
+  {% if info %}
+  <table class="table table-hover align-middle mb-0">
+    <tbody>
+      <tr><th style="width:180px">当前模式</th><td><code>{{ info.mode }}</code></td></tr>
+      <tr><th>当前生效预设</th><td>
+        <code>{{ info.effective or info.configured }}</code>
+        {% if (info.effective or '') == info.presetNames.v2 %}<span class="badge confirmed ms-2">仿真</span>{% endif %}
+        <span class="muted small ms-2">（按当前模式解析；{{ info.mode }}）</span>
+      </td></tr>
+      <tr><th>config.toml 顶层默认</th><td><code>{{ info.configured }}</code> <span class="muted small">（仅 closed-agent / 非仿真模式使用）</span></td></tr>
+      <tr><th>仿真预设名</th><td><code>{{ info.presetNames.v2 }}</code></td></tr>
+      <tr><th>DSH 可用预设</th><td>
+        {% if info.available %}
+          {% for id in info.available %}<code>{{ id }}</code> {% endfor %}
+        {% else %}<span class="muted">DSH 未返回可用预设列表（可能未连接）</span>{% endif %}
+      </td></tr>
+    </tbody>
+  </table>
+  <p class="hint">预设文件：<code>dsh/agent-presets/qq-chat-v2/agent.cordis.yml</code>；改完运行 <code>node scripts/build-agent-preset-patches.mjs</code> 并重启 DSH。</p>
+  {% else %}
+  <p class="empty">桥接离线，暂无预设信息。</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}会话 · qq-bridge 控制台{% endblock %}
+{% block content %}
+{% if error %}<div class="banner warn">桥接离线：{{ error }}</div>{% endif %}
+
+<section class="panel">
+  <h2>会话 <small>（{{ sessions|length }} 个）</small>
+    <form method="post" action="/pause" class="inline right">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="back" value="/sessions">
+      <button class="btn btn-outline-secondary" type="submit">{{ '恢复 AI' if false else '暂停/恢复 AI' }}</button>
+    </form>
+  </h2>
+  {% if sessions %}
+  <table class="table table-hover align-middle mb-0">
+    <thead><tr><th>会话</th><th>类型</th><th>未读</th><th>唤醒</th><th>次数</th><th></th></tr></thead>
+    <tbody>
+    {% for s in sessions %}
+      <tr class="{{ 'sel' if s.key == selected else '' }}">
+        <td><code>{{ s.key }}</code></td>
+        <td>{{ '群聊' if s.kind == 'group' else '私聊' }}</td>
+        <td>{{ s.unread }}</td>
+        <td>{% if s.kind == 'private' %}即回（无合批/无概率）{% else %}{{ s.mode or '-' }}{% if s.pendingWake %} · 待唤醒{% endif %}{% endif %}</td>
+        <td>{{ s.wakeCount }}</td>
+        <td><a href="/sessions?key={{ s.key|urlencode }}">详情</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">还没有会话记录（或桥接离线）。</p>
+  {% endif %}
+</section>
+
+{% if detail %}
+<section class="panel">
+  <h2>会话详情：<code>{{ detail.key }}</code> <button class="btn btn-sm btn-outline-secondary copy-key" type="button" data-key="{{ detail.key }}">复制 ID</button></h2>
+  <p class="hint">未读 {{ detail.unread }} 条{% if detail.pendingWake %} · 有待唤醒定时器{% endif %}</p>
+  <div class="grid2">
+    {% if detail.key[:8] == 'private:' %}
+    <div class="form">
+      <h3>私聊模式</h3>
+      <p class="hint">收到消息<b>立即回复</b>：不等待合批、不抽概率、不看关键词、不排主动检查、不进潜水。
+      这里没有群聊那套唤醒配置可调。</p>
+    </div>
+    {% else %}
+    <form method="post" action="/sessions/{{ detail.key|urlencode }}/wake" class="form">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <h3>唤醒配置</h3>
+      <label>模式
+        <select class="form-select" name="mode">
+          <option value="diving" {{ 'selected' if detail.wakeConfig.mode == 'diving' else '' }}>潜水（diving）</option>
+          <option value="active" {{ 'selected' if detail.wakeConfig.mode == 'active' else '' }}>活跃（active）</option>
+        </select>
+      </label>
+      <label>合并窗口（毫秒）
+        <input type="number" name="batchWindowMs" min="1000" step="500" value="{{ detail.wakeConfig.batchWindowMs }}">
+      </label>
+      <label>普通消息唤醒概率（%）
+        <input type="number" name="probability" min="0" max="100" step="1" value="{{ (detail.wakeConfig.triggers.probability * 100)|round|int }}">
+      </label>
+      <label class="row"><input type="checkbox" name="atMention" {{ 'checked' if detail.wakeConfig.triggers.atMention else '' }}> @ 或引用时唤醒</label>
+      <label class="row"><input type="checkbox" name="nameMention" {{ 'checked' if detail.wakeConfig.triggers.nameMention else '' }}> 叫名字时唤醒</label>
+      <label class="row"><input type="checkbox" name="question" {{ 'checked' if detail.wakeConfig.triggers.question else '' }}> 被提问时唤醒</label>
+      <label class="row"><input type="checkbox" name="poke" {{ 'checked' if detail.wakeConfig.triggers.poke else '' }}> 被拍一拍时唤醒</label>
+      <label class="row"><input type="checkbox" name="anyMessage" {{ 'checked' if detail.wakeConfig.triggers.anyMessage else '' }}> 任意消息都唤醒</label>
+      <label>关键词（逗号分隔，整份替换）
+        <textarea class="form-control" name="keywords" rows="3">{{ detail.wakeConfig.triggers.keywords|join(', ') }}</textarea>
+      </label>
+      <button class="btn btn-primary" type="submit">保存唤醒配置</button>
+    </form>
+      {% endif %}
+
+      <div class="form">
+        <h3>会话操作</h3>
+      <form method="post" action="/sessions/{{ detail.key|urlencode }}/mark-read">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="btn btn-primary" type="submit" {{ 'disabled' if not detail.unread else '' }}>全部标记已读（清 {{ detail.unread }} 条）</button>
+      </form>
+
+      <h3 style="margin-top:24px">重置上下文</h3>
+      <form method="post" action="/sessions/{{ detail.key|urlencode }}/reset"
+            onsubmit="return confirm('重置 {{ detail.key }} 的会话上下文？将从 DSH 新建会话，原上下文不再带入。')">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button class="btn btn-outline-danger" type="submit">重置会话上下文（新建 DSH 会话）</button>
+      </form>
+      <h3 style="margin-top:24px">最近消息</h3>
+      {% if detail.recent %}
+      <table class="table table-sm table-hover align-middle mb-0">
+        <tbody>
+        {% for m in detail.recent %}
+          <tr><td class="muted">#{{ m.seq }}</td><td>{{ m.sender }}</td><td>{{ m.text }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty">暂无</p>{% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

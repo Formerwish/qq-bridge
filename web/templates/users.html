@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}用户管理 · qq-bridge 控制台{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>用户管理 <small>（管理员可创建/重置密码/启停；用户表与知识库共用）</small></h2>
+  <div class="banner warn">密码按<b>明文</b>存储（用户要求，不兼容旧哈希）：任何能读数据库/备份的人都能直接看到密码；仅建议本机单人使用。</div>
+  <table class="table table-hover align-middle mb-0">
+    <thead><tr><th>#</th><th>用户名</th><th>角色</th><th>状态</th><th>密码</th><th>创建人</th><th>最近登录</th><th></th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td class="muted">{{ row.id }}</td>
+        <td>{{ row.username }}</td>
+        <td>{{ row.role }}</td>
+        <td>{{ '启用' if row.enabled else '停用' }}</td>
+        <td class="muted small">{% if row.plain_password %}<details><summary>显示</summary><code>{{ row.plain_password }}</code></details>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="muted small">{{ row.created_by or '-' }}</td>
+        <td class="muted small">{{ row.last_login_at.strftime('%m-%d %H:%M') if row.last_login_at else '-' }}</td>
+        <td class="actions">
+          <form method="post" action="/users/{{ row.id }}/toggle" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <button class="btn btn-link btn-sm p-0" type="submit">{{ '停用' if row.enabled else '启用' }}</button>
+          </form>
+          <form method="post" action="/users/{{ row.id }}/password" class="inline" onsubmit="return confirm('重置 {{ row.username }} 的密码？')">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input class="form-control" name="password" placeholder="留空=随机生成" size="12">
+            <button class="btn btn-link btn-sm p-0" type="submit">重置密码</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>新建用户</h2>
+  <form method="post" action="/users" class="form row-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label>用户名 <input class="form-control" name="username" required maxlength="64"></label>
+    <label>密码 <input class="form-control" name="password" type="text" required minlength="8" placeholder="至少 8 位"></label>
+    <label>角色
+      <select class="form-select" name="role">
+        <option value="editor">editor（可编辑知识库/黑话）</option>
+        <option value="admin">admin（含用户管理）</option>
+      </select>
+    </label>
+    <button class="btn btn-primary" type="submit">创建</button>
+  </form>
+</section>
+{% endblock %}

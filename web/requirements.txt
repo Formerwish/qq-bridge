@@ -1,0 +1,9 @@
+# 统一控制台（Flask）依赖。刻意只用最小集合：
+# - Flask：Web 框架（用户允许的既有技术栈）
+# - PyJWT：JWT 签名（不引入 flask-jwt-extended 这类扩展框架）
+# - PyMySQL：复用知识库所在的 MySQL
+flask>=3.0,<4
+PyJWT>=2.8,<3
+PyMySQL>=1.1,<2
+# 登录验证码（参考 minitor 的 PIL 生成方式）
+Pillow>=10,<14

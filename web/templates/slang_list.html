@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}黑话库 · qq-bridge 控制台{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>黑话库 <small>（共 {{ rows|length }} 条待处理视图；DB 权威，桥接 60s 内同步）</small>
+    <form method="post" action="/slang/learn" class="inline right">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button class="btn btn-outline-secondary" name="mode" value="extract" type="submit">AI 抽取候选</button>
+      <button class="btn btn-outline-secondary" name="mode" value="research" type="submit">AI 研究</button>
+    </form>
+  </h2>
+  <div class="tabs">
+    <a href="/slang?status=all" class="{{ 'active' if status == 'all' else '' }}">全部</a>
+    <a href="/slang?status=candidate" class="{{ 'active' if status == 'candidate' else '' }}">候选 {{ counts.get('candidate', 0) }}</a>
+    <a href="/slang?status=confirmed" class="{{ 'active' if status == 'confirmed' else '' }}">已确认 {{ counts.get('confirmed', 0) }}</a>
+    <a href="/slang?status=rejected" class="{{ 'active' if status == 'rejected' else '' }}">已拒绝 {{ counts.get('rejected', 0) }}</a>
+    <form method="get" action="/slang" class="inline">
+      <input type="hidden" name="status" value="{{ status }}">
+      <input class="form-control" name="q" value="{{ q }}" placeholder="搜索词条/含义">
+      <button class="btn btn-outline-secondary" type="submit">搜索</button>
+    </form>
+  </div>
+  <table class="table table-hover align-middle mb-0">
+    <thead><tr><th>词条</th><th>含义</th><th>用法</th><th>状态</th><th>出现</th><th></th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td><a href="/slang/{{ row.id }}/edit"><b>{{ row.content }}</b></a>{% if row.risk %}<div class="muted small">风险：{{ row.risk }}</div>{% endif %}</td>
+        <td>{{ row.meaning or '-' }}</td>
+        <td class="muted small">{{ row.usage or '-' }}</td>
+        <td><span class="badge {{ row.status }}">{{ {'candidate':'候选','confirmed':'已确认','rejected':'已拒绝'}.get(row.status, row.status) }}</span></td>
+        <td>{{ row.count }}</td>
+        <td class="actions">
+          {% if row.status != 'confirmed' %}
+          <form method="post" action="/slang/{{ row.id }}/status" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="status" value="confirmed">
+            <input type="hidden" name="back" value="{{ status }}">
+            <button class="btn btn-link btn-sm p-0" type="submit">确认</button>
+          </form>
+          {% endif %}
+          {% if row.status != 'rejected' %}
+          <form method="post" action="/slang/{{ row.id }}/status" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="status" value="rejected">
+            <input type="hidden" name="back" value="{{ status }}">
+            <button class="btn btn-link btn-sm p-0" type="submit">拒绝</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/slang/{{ row.id }}/delete" class="inline" onsubmit="return confirm('删除「{{ row.content }}」？')">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <button class="btn btn-link btn-sm text-danger p-0" type="submit">删除</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">没有匹配的黑话</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

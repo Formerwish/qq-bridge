@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}概览 · qq-bridge 控制台{% endblock %}
+{% block content %}
+{% if bridge_error %}
+<div class="banner warn">桥接离线：{{ bridge_error }}</div>
+{% endif %}
+
+<section class="cards" id="status-cards">
+  {% if status %}
+  <div class="card stat" data-tone="violet"><div class="stat-main"><span class="label">模式</span><strong>{{ status.mode }}</strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg></span></div>
+  <div class="card stat" data-tone="cyan"><div class="stat-main"><span class="label">DSH</span><strong>{{ '就绪' if status.dshReady else '未就绪' }}</strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
+  <div class="card stat" data-tone="green"><div class="stat-main"><span class="label">AI 状态</span><strong class="{{ 'bad' if status.paused else 'good' }}">{{ '已暂停' if status.paused else '运行中' }}</strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 14-4-4 1.4-1.4L11 13.2l4.6-4.6L17 10z"/></svg></span></div>
+  <div class="card stat" data-tone="orange"><div class="stat-main"><span class="label">会话</span><strong>{{ status.sessions }}<small>（群 {{ status.groups }} / 私聊 {{ status.privateChats }}）</small></strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span></div>
+  <div class="card stat" data-tone="magenta"><div class="stat-main"><span class="label">机器人</span><strong>{{ status.self.displayName or '未知' }}<small>#{{ status.self.userId or '-' }}</small></strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4M8 4h8M5 8h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2zm4 5h.01M15 13h.01"/></svg></span></div>
+  <div class="card stat"><div class="stat-main"><span class="label">运行时长</span><strong id="uptime" data-sec="{{ status.uptimeSec }}">{{ (status.uptimeSec // 3600) }}h {{ ((status.uptimeSec % 3600) // 60) }}m</strong></div><span class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 6v6l4 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/></svg></span></div>
+  {% else %}
+  <div class="card stat empty">桥接不可达，暂无状态</div>
+  {% endif %}
+</section>
+
+<section class="panel usage-panel">
+  <h2>用量 <small>{{ usage.title }} · 按峰谷着色</small>
+    <form method="get" action="/" class="usage-filter">
+      <select class="form-select" name="scope">
+        <option value="24h" {{ 'selected' if usage.scope == '24h' else '' }}>近 24 小时</option>
+        <option value="7d" {{ 'selected' if usage.scope == '7d' else '' }}>近 7 天</option>
+        <option value="all" {{ 'selected' if usage.scope == 'all' else '' }}>全部</option>
+        <option value="day" {{ 'selected' if usage.scope == 'day' else '' }}>指定某天</option>
+      </select>
+      <input class="form-control usage-day" type="date" name="day" value="{{ usage.day }}">
+      <select class="form-select" name="conv">
+        <option value="">全部会话</option>
+        {% for c in usage.conversations %}<option value="{{ c.key }}" {{ 'selected' if usage.conv == c.key else '' }}>{{ c.key }} · ¥{{ "%.2f"|format(c.cost) }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-outline-secondary" type="submit">查询</button>
+    </form>
+    <span class="usage-total">估算 <b>¥{{ '%.3f'|format(usage.total_cost) }}</b> · {{ '{:,}'.format(usage.total_tokens) }} tokens</span>
+  </h2>
+  {% if usage.has_data %}
+  <div class="usage-bars" role="img" aria-label="{{ usage.title }} token 用量">
+    {% for b in usage.buckets %}
+    <div class="ubar-wrap" data-time="{{ b.ts.strftime('%m-%d %H:%M') }}" data-tokens="{{ '{:,}'.format(b.tokens) }}" data-cost="{{ '%.4f'|format(b.cost) }}" data-period="{{ b.period }}" data-peak="{{ '1' if b.peak else '0' }}">
+      <div class="ubar {{ 'peak' if b.peak else 'off' }}" style="height: {{ b.height }}%"></div>
+      <span class="ubar-label">{% if usage.scope in ('24h', 'day') %}{{ b.label if loop.index0 % 3 == 0 else '' }}{% else %}{{ b.label if (loop.index0 % 5 == 0 or loop.last) else '' }}{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="usage-legend">
+    <span><i class="dot peak"></i>高峰 {{ '{:,}'.format(usage.peak_tokens) }} tokens · ¥{{ '%.3f'|format(usage.peak_cost) }}</span>
+    <span><i class="dot off"></i>空闲 {{ '{:,}'.format(usage.off_tokens) }} tokens · ¥{{ '%.3f'|format(usage.off_cost) }}</span>
+    <span class="muted small">按 DeepSeek 官方人民币价估算（元/百万 token）；可在峰谷页「价格」里按时段覆盖。全部范围最多展示 180 天。</span>
+  </div>
+  {% else %}
+  <p class="empty">该范围没有用量账本记录（state/token-usage.jsonl）。</p>
+  {% endif %}
+<div class="ubar-tip" id="ubar-tip" hidden></div>
+</section>
+
+<section class="panel">
+  <h2>会话 <small>最新状态</small><button class="btn btn-outline-secondary" id="refresh">刷新</button></h2>
+  {% if sessions %}
+  <table class="table table-hover align-middle mb-0">
+    <thead><tr><th>会话</th><th>类型</th><th>未读</th><th>唤醒配置</th><th>唤醒次数</th><th>最近回复</th></tr></thead>
+    <tbody>
+    {% for s in sessions %}
+      <tr>
+        <td><code>{{ s.key }}</code></td>
+        <td>{{ '群聊' if s.kind == 'group' else '私聊' }}</td>
+        <td>{{ s.unread }}</td>
+        <td>{{ s.mode or '-' }}{% if s.pendingWake %} · 待唤醒{% endif %}</td>
+        <td>{{ s.wakeCount }}</td>
+        <td class="muted">{{ s.lastAiReplyAt and '有' or '-' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">还没有会话记录。</p>
+  {% endif %}
+</section>
+{% endblock %}

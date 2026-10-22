@@ -15,7 +15,7 @@ await test('closed-agent session is not reused after switching to chat', async (
   h.setMode('chat');
   const restricted = await h.ensureSession('private:123');
   assert.notEqual(restricted, privileged);
-  assert.equal(h.calls.created.at(-1).agentPreset, 'qq-chat');
+  assert.equal(h.calls.created.at(-1).agentPreset, 'qq-chat-v2');
   assert.ok(h.calls.cancelled.includes(privileged));
 });
 await test('unavailable preset catalogue fails closed for QQ and learner sessions', async (h) => {
@@ -436,5 +436,182 @@ await test('malformed HTTP request targets return 400 without hanging', async (h
   } catch (error) { failures++; console.error('FAIL console transport guards:', error.message); }
   finally { await new Promise((resolve) => server.close(resolve)); await h.close(); }
 }
+
+await test('internal control API requires control token and reports status', async (h) => {
+  const server = h.startConsoleServer();
+  if (!server.listening) await new Promise((resolve) => server.once('listening', resolve));
+  const port = server.address().port;
+  const call = (headers) => new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, path: '/internal/status', method: 'GET', headers: { host: '127.0.0.1:' + port, ...headers } }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body }));
+    });
+    req.on('error', reject);
+    req.setTimeout(2000, () => req.destroy(new Error('internal api hung')));
+    req.end();
+  });
+  try {
+    const denied = await call({});
+    assert.equal(denied.status, 401, '不带 x-control-token 必须 401');
+    const ok = await call({ 'x-control-token': 'fixture-console-token' });
+    assert.equal(ok.status, 200, '带正确控制令牌必须 200');
+    const data = JSON.parse(ok.body);
+    assert.equal(data.ok, true);
+    assert.equal(typeof data.sessions, 'number');
+    assert.ok(data.self && typeof data.self.displayName === 'string');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+await test('private chats wake immediately and never schedule sleep/proactive timers', async (h) => {
+  const key = 'private:123';
+  await h.ensureSession(key);
+  const st = h.getSocialV2State(key);
+  st.wakeConfig.infinite = false;
+  st.wakeConfig.sleepUntil = new Date(Date.now() + 3600_000).toISOString();
+  h.setupSleepTimerV2(key);
+  assert.equal(st.sleepTimer ?? null, null, '私聊不应布置睡眠定时器');
+  h.scheduleProactiveCheckV2(key);
+  assert.equal(st.proactiveTimer ?? null, null, '私聊不应布置主动机会检查');
+  h.scheduleWakeV2(key, 'private');
+  assert.ok(st.pendingWakeTimer, '私聊应立即排一个唤醒');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(st.pendingWakeTimer, null, '私聊唤醒应立即触发（不走合批窗口）');
+});
+
+await test('group chats keep the batch window', async (h) => {
+  const key = 'group:456';
+  await h.ensureSession(key);
+  const st = h.getSocialV2State(key);
+  h.scheduleWakeV2(key, 'keyword:测试');
+  assert.ok(st.pendingWakeTimer, '群聊应排唤醒');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.ok(st.pendingWakeTimer, '群聊应继续等合批窗口（8s）');
+  clearTimeout(st.pendingWakeTimer);
+  st.pendingWakeTimer = null;
+  st.pendingWakeReason = null;
+});
+
+await test('admin config endpoint: owner private only, allowlist + redaction', async (h) => {
+  const server = h.startConsoleServer();
+  if (!server.listening) await new Promise((resolve) => server.once('listening', resolve));
+  const port = server.address().port;
+  const post = (body, headers = {}) => new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = http.request({
+      host: '127.0.0.1', port, path: '/api/socialV2/admin-config', method: 'POST',
+      headers: { host: '127.0.0.1:' + port, 'content-type': 'application/json', 'content-length': Buffer.byteLength(data), 'x-console-token': 'fixture-console-token', ...headers }
+    }, (res) => { let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => resolve({ status: res.statusCode, body: b })); });
+    req.on('error', reject);
+    req.setTimeout(2000, () => req.destroy(new Error('admin-config hung')));
+    req.end(data);
+  });
+  try {
+    await h.ensureSession('private:123');
+    await h.ensureSession('group:456');
+    const st = h.getSocialV2State('private:123');
+    const token = st.agentToken;
+    const groupToken = h.getSocialV2State('group:456').agentToken;
+    const denied = await post({ key: 'group:456', action: 'get' }, { 'x-agent-token': groupToken });
+    assert.equal(denied.status, 403, '非管理员私聊必须拒绝（令牌合法但会话不是 owner 私聊）');
+    const bad = await post({ key: 'private:123', action: 'set', updates: { 'dsh.model': 'x' } }, { 'x-agent-token': token });
+    assert.equal(bad.status, 400, '敏感字段必须拒绝：' + bad.status + ' ' + bad.body);
+    const ok = await post({ key: 'private:123', action: 'get' }, { 'x-agent-token': token });
+    assert.equal(ok.status, 200);
+    const data = JSON.parse(ok.body);
+    assert.equal(data.ok, true);
+    assert.ok(data.config && data.config.dsh, '应返回配置');
+    assert.equal(data.config.dsh.authToken, '***', '敏感字段必须脱敏');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+await test('admin config works tokenless in closed-agent but only for owner private', async (h) => {
+  const server = h.startConsoleServer();
+  if (!server.listening) await new Promise((resolve) => server.once('listening', resolve));
+  const port = server.address().port;
+  const post = (body) => new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = http.request({
+      host: '127.0.0.1', port, path: '/api/socialV2/admin-config', method: 'POST',
+      headers: { host: '127.0.0.1:' + port, 'content-type': 'application/json', 'content-length': Buffer.byteLength(data), 'x-console-token': 'fixture-console-token' }
+    }, (res) => { let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => resolve({ status: res.statusCode, body: b })); });
+    req.on('error', reject);
+    req.setTimeout(2000, () => req.destroy(new Error('admin-config hung')));
+    req.end(data);
+  });
+  try {
+    h.setMode('closed-agent');
+    await h.ensureSession('private:123');
+    const ok = await post({ key: 'private:123', action: 'get' });
+    assert.equal(ok.status, 200, 'closed-agent 下无令牌应可用：' + ok.body);
+    const other = await post({ key: 'private:999', action: 'get' });
+    assert.equal(other.status, 403, '非 owner 私聊必须拒绝');
+  } finally {
+    h.setMode('reserved2');
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+await test('periods override wake probability and proactive check', async (h) => {
+  const key = 'group:456';
+  await h.ensureSession(key);
+  const st = h.getSocialV2State(key);
+  st.wakeConfig.triggers = {
+    ...st.wakeConfig.triggers,
+    atMention: false, nameMention: false, question: false, anyMessage: false,
+    speakerIds: [], keywords: [], probability: 0
+  };
+  h.cfg.periods = [{ name: '全天', start: '00:00', end: '23:59', replyProbability: 1, proactive: false }];
+  const reason = h.evaluateWakeTriggerV2(key, st, {}, 'group', '随便说点什么', '随便说点什么', false);
+  assert.equal(reason, 'probability', '时段 replyProbability=1 应覆盖会话 probability=0');
+  h.scheduleProactiveCheckV2(key);
+  assert.equal(st.proactiveTimer ?? null, null, '时段 proactive=false 时不应排主动检查');
+  h.cfg.periods = [];
+});
+
+await test('internal roles/stickers endpoints read and write inside the fixture root', async (h) => {
+  const server = h.startConsoleServer();
+  if (!server.listening) await new Promise((resolve) => server.once('listening', resolve));
+  const port = server.address().port;
+  const call = (path, method = 'GET', body = null) => new Promise((resolve, reject) => {
+    const data = body ? JSON.stringify(body) : null;
+    const req = http.request({
+      host: '127.0.0.1', port, path, method,
+      headers: { host: '127.0.0.1:' + port, 'x-control-token': 'fixture-console-token',
+        ...(data ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } : {}) }
+    }, (res) => { let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => resolve({ status: res.statusCode, body: b })); });
+    req.on('error', reject);
+    req.setTimeout(3000, () => req.destroy(new Error('internal api hung')));
+    req.end(data || undefined);
+  });
+  try {
+    const roles = await call('/internal/roles');
+    assert.equal(roles.status, 200);
+    const rolesData = JSON.parse(roles.body);
+    assert.equal(rolesData.ok, true);
+    assert.ok(Array.isArray(rolesData.roles));
+    const presets = await call('/internal/presets');
+    assert.equal(presets.status, 200);
+    const badges = await call('/internal/stickers');
+    assert.equal(badges.status, 200);
+    assert.equal(JSON.parse(badges.body).ok, true);
+    const saved = await call('/internal/role', 'POST', { name: '测试人格', content: '## 只做测试\n我是测试人格。' });
+    assert.equal(saved.status, 200, saved.body);
+    const readBack = await call('/internal/role?name=' + encodeURIComponent('测试人格'));
+    assert.equal(readBack.status, 200);
+    assert.match(JSON.parse(readBack.body).content, /只做测试/);
+    const denied = await call('/internal/role', 'POST', { name: '', content: 'x' });
+    assert.equal(denied.status, 400, '空人格名必须拒绝');
+    const traversal = await call('/internal/role', 'POST', { name: '../evil', content: 'x' });
+    assert.equal(traversal.status, 200, '路径片段应被净化后接受');
+    assert.ok(!JSON.parse(traversal.body).name.includes('..'), '净化后不得包含路径片段');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
 
 if (failures) process.exitCode = 1;

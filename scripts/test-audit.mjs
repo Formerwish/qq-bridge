@@ -17,6 +17,21 @@ const tests = [
   'test-md-to-plain.mjs', 'test-slang-learn.mjs', 'test-mux-reconnect.mjs',
   'test-token-economy.mjs', 'test-qq-model-view.mjs', 'test-qq-preset-contract.mjs',
   'test-reply-wait.mjs', 'test-preset-prompt.mjs', 'test-role-card.mjs',
+  // 第五人格知识库（MySQL）：只测纯函数、注入预算与 fail-open，不连真库
+  // （真库连通性/检索用 scripts/probe-kb.mjs，需 config.json 的 kb 段）。
+  'test-kb.mjs',
+  // 黑话库（kb_slang）：行↔条目映射、对账的新增/更新/删除/库里更新更晚就跳过、故障降级。
+  'test-slang-db.mjs',
+  // 控制台监听（consoleUrl/consolePort）：通配地址映射、https 443、非法配置退回本机、真实 listen 可达。
+  'test-console-endpoint.mjs',
+  // 峰谷时段：HH:MM、跨零点、days 归属、多段优先级、覆盖字段、非法配置丢弃。
+  'test-periods.mjs',
+  // 配置存储：TOML 权威 + JSON 过渡镜像、null 剔除、双读、写回与镜像同步、坏文件抛错。
+  'test-config-store.mjs',
+  // 动图→九宫格：布局自适应（不足 9 帧不硬凑）、采样、PNG 输出、失败回退。
+  'test-gif-frames.mjs',
+  // 引用目标兜底：partial 快照下模型凭记忆填旧 id 会引错人，必须判定为「没见过」并丢弃引用。
+  'test-reply-target.mjs',
   // 体检修复回归：无令牌智能体调用面、send-burst 失败回滚、唤醒限频重试、
   // 定时器类暂存唤醒补发、collector 生命周期、ownerQQ 覆盖语义、预设名校验、
   // wake triggers 白名单、memory-update 边界、wait 租约归一化、md/黑话/表情/账本；
@@ -42,7 +57,6 @@ const tests = [
   // 语音图形界面（参数解析/鉴权/路径穿越/文件名净化；live 段需普通终端）
   'test-voice-gui.mjs',
   // 控制台静态契约（跑不了 Playwright 的环境下的替代回归）
-  'test-console-static.mjs',
   // 语音系统整体结构检查（入口/依赖/端点/开关/文档一致性）
   'test-voice-system.mjs',
   // SnowLuma 账号/token 自发现（换 QQ 账号后 token 会变，写死的工具会 401）

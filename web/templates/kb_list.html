@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}知识库 · qq-bridge 控制台{% endblock %}
+{% block content %}
+<section class="panel">
+  <h2>知识库 <small>（共 {{ rows|length }} 条；桥接每 60s 刷新，下一条唤醒生效）</small>
+    <a class="btn btn-primary ms-auto" href="/kb/new">+ 新建</a>
+  </h2>
+  <form method="get" action="/kb" class="filters">
+    <input class="form-control" name="q" value="{{ q }}" placeholder="搜索标题/关键词/正文">
+    <select class="form-select" name="topic">
+      <option value="">全部主题</option>
+      {% for t in topics %}<option value="{{ t }}" {{ 'selected' if t == topic else '' }}>{{ t }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-outline-secondary" type="submit">筛选</button>
+    <a class="btn btn-outline-secondary" href="/kb/preview">注入预览</a>
+    <a class="btn btn-outline-secondary" href="/revisions">修订记录</a>
+  </form>
+  <table class="table table-hover align-middle mb-0">
+    <thead><tr><th>#</th><th>标题</th><th>关键词</th><th>优先级</th><th>状态</th><th>更新</th><th></th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td class="muted">{{ row.id }}</td>
+        <td><a href="/kb/{{ row.id }}/edit">{{ row.title }}</a><div class="muted small">{{ row.topic }}</div></td>
+        <td class="muted small">{{ row.keywords }}</td>
+        <td>{{ row.priority }}</td>
+        <td>{{ '启用' if row.enabled else '停用' }}</td>
+        <td class="muted small">{{ row.updated_by or '-' }} · {{ row.updated_at.strftime('%m-%d %H:%M') if row.updated_at else '' }}</td>
+        <td class="actions">
+          <form method="post" action="/kb/{{ row.id }}/toggle" class="inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <button class="btn btn-link btn-sm p-0" type="submit">{{ '停用' if row.enabled else '启用' }}</button>
+          </form>
+          <form method="post" action="/kb/{{ row.id }}/delete" class="inline" onsubmit="return confirm('确认删除「{{ row.title }}」？')">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <button class="btn btn-link btn-sm text-danger p-0" type="submit">删除</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="empty">没有匹配的条目</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

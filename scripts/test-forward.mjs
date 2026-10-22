@@ -6,6 +6,7 @@
 // 5. 若桥接运行中，校验 /api/socialV2/forward-message 的安全拒绝逻辑
 // 运行：node scripts/test-forward.mjs
 import fs from 'node:fs';
+import { resolveConsoleEndpoint } from '../src/console-endpoint.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -103,11 +104,15 @@ if (fs.existsSync(consoleTokenFile) && fs.existsSync(socialV2File)) {
     const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8'));
     const social = JSON.parse(fs.readFileSync(socialV2File, 'utf8'));
     const conv = social?.conversations ? Object.entries(social.conversations)[0] : null;
-    const consoleToken = fs.readFileSync(consoleTokenFile, 'utf8').trim();
+    // 有效令牌以 config.consoleToken 为准（合法时），state/console-token 只是自动生成的回退值。
+    const configuredToken = String(config.consoleToken ?? '').trim();
+    const consoleToken = /^[A-Za-z0-9_-]{16,128}$/.test(configuredToken)
+      ? configuredToken
+      : fs.readFileSync(consoleTokenFile, 'utf8').trim();
     if (conv) {
       const [key, st] = conv;
       const agentToken = st?.agentToken;
-      const urlBase = `http://127.0.0.1:${config.consolePort || 3100}/api/socialV2/forward-message`;
+      const urlBase = `${resolveConsoleEndpoint({ consoleUrl: config.consoleUrl, consolePort: config.consolePort }).clientUrl}/api/socialV2/forward-message`;
       const authHeaders = { 'x-console-token': consoleToken };
       if (agentToken) {
         // 未带 agent token 应被拒绝（reserved2）

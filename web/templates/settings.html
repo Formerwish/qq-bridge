@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}设置 · qq-bridge 控制台{% endblock %}
+{% block page_desc %}<p class="desc">白名单、管理员与会话时长；保存后立即热更新，无需重启桥接。</p>{% endblock %}
+{% block content %}
+{% if error %}<div class="banner warn">桥接离线：{{ error }}</div>{% endif %}
+
+{% macro id_list(name, title, hint, values, placeholder) %}
+<div class="list-editor" data-name="{{ name }}" data-values="{{ values|join(',') }}" data-placeholder="{{ placeholder }}">
+  <input type="hidden" name="{{ name }}" value="{{ values|join(',') }}">
+  <div class="le-toolbar">
+    <input class="form-control le-new" placeholder="{{ placeholder }}" inputmode="numeric">
+    <button type="button" class="btn btn-primary btn-sm le-add">添加</button>
+    <span class="le-count">{{ values|length }} 个</span>
+  </div>
+  <table class="table table-sm le-table">
+    <thead><tr><th style="width:60px">#</th><th>{{ title }}</th><th style="width:150px" class="text-end">操作</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="le-empty" hidden>暂无条目</p>
+  <p class="settings-help">{{ hint }}</p>
+</div>
+{% endmacro %}
+
+{% if info %}
+<form method="post" action="/settings" class="settings-form" id="settings-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+
+  <section class="settings-card">
+    <header class="settings-head">
+      <div>
+        <h2>访问白名单</h2>
+        <p>只有名单内的群/私聊会被响应；支持逐条添加、编辑、删除。</p>
+      </div>
+      <div class="settings-counts">
+        群 <b data-count-for="allow_groups">{{ info.allow.get('groups', [])|length }}</b>
+        · 私聊 <b data-count-for="allow_private">{{ info.allow.get('private', [])|length }}</b>
+      </div>
+    </header>
+    <div class="settings-grid">
+      {{ id_list('allow_groups', '允许的群号', '留空 = 不响应任何群；QQ 群号纯数字。', info.allow.get('groups', []), '输入群号后回车添加') }}
+      {{ id_list('allow_private', '允许的私聊 QQ', '管理员私聊必须在这里，否则改配置会被拒绝。', info.allow.get('private', []), '输入 QQ 号后回车添加') }}
+    </div>
+  </section>
+
+  <section class="settings-card">
+    <header class="settings-head">
+      <div>
+        <h2>拒绝名单</h2>
+        <p>拒绝优先于允许：即使也在白名单里，命中这里就不会响应。</p>
+      </div>
+      <div class="settings-counts">
+        群 <b data-count-for="deny_groups">{{ info.deny.get('groups', [])|length }}</b>
+        · 私聊 <b data-count-for="deny_private">{{ info.deny.get('private', [])|length }}</b>
+      </div>
+    </header>
+    <div class="settings-grid">
+      {{ id_list('deny_groups', '拒绝的群号', '命中即不响应，即使也在白名单里。', info.deny.get('groups', []), '输入群号后回车添加') }}
+      {{ id_list('deny_private', '拒绝的私聊 QQ', '命中即不响应。', info.deny.get('private', []), '输入 QQ 号后回车添加') }}
+    </div>
+  </section>
+
+  <section class="settings-card">
+    <header class="settings-head">
+      <div>
+        <h2>管理员与会话</h2>
+        <p>ownerQQ 决定谁能在私聊里让机器人改配置；会话时长只影响控制台登录。</p>
+      </div>
+    </header>
+    <div class="settings-grid">
+      <label class="settings-field">
+        <span class="settings-label">管理员 QQ（ownerQQ）</span>
+        <input class="form-control" type="number" name="owner_qq" value="{{ info.ownerQQ or '' }}" min="10000" placeholder="583937437">
+      </label>
+      <label class="settings-field">
+        <span class="settings-label">控制台会话时长</span>
+        <span class="input-suffix"><input class="form-control" type="number" name="session_hours" value="{{ info.sessionHours or 8 }}" min="1" max="168"><span>小时</span></span>
+      </label>
+      <label class="settings-field">
+        <span class="settings-label">桥接控制台地址</span>
+        <input class="form-control" value="{{ info.consoleUrl or '' }}" readonly>
+      </label>
+      <label class="settings-field">
+        <span class="settings-label">控制台令牌</span>
+        <input class="form-control" value="{{ '已配置' if info.consoleTokenConfigured else '未配置' }}" readonly>
+      </label>
+    </div>
+  </section>
+
+  <div class="settings-foot">
+    <span class="settings-dirty" id="settings-dirty" hidden>有未保存的修改</span>
+    <button class="btn btn-primary" type="submit">保存并热更新</button>
+    <a class="btn btn-outline-secondary" href="/settings">重置</a>
+    <span class="settings-foot-hint">保存后桥接立即生效；当前登录会话不受影响。</span>
+  </div>
+</form>
+{% else %}
+<p class="empty">桥接离线，无法读取配置。</p>
+{% endif %}
+{% endblock %}

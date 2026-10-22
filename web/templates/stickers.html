@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}表情库 · qq-bridge 控制台{% endblock %}
+{% block content %}
+{% if error %}<div class="banner warn">桥接离线：{{ error }}</div>{% endif %}
+<section class="panel">
+  <h2>表情库 <small>（共 {{ total }} 个收藏；备注/标签只影响 AI 选图，不改 QQ 官方备注）</small>
+    <form method="post" action="/stickers/sync" class="inline right">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button class="btn btn-outline-secondary" type="submit">从 QQ 同步</button>
+    </form>
+  </h2>
+  <form method="get" action="/stickers" class="filters">
+    <input class="form-control" name="q" value="{{ q }}" placeholder="搜索备注/描述/标签">
+    <button class="btn btn-outline-secondary" type="submit">搜索</button>
+    <a class="btn {{ 'btn-primary' if fav == '1' else 'btn-outline-secondary' }}" href="/stickers?fav=1">只看常用</a>
+  </form>
+  {% if rows %}
+  <table class="table table-hover align-middle mb-0">
+    <thead><tr><th>图片</th><th>描述</th><th>备注（AI 选图依据）</th><th>标签</th><th>用过的次数</th><th></th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td><a href="/stickers/image/{{ row.id|urlencode }}" target="_blank" rel="noopener"><img class="sticker-thumb" loading="lazy" src="/stickers/image/{{ row.id|urlencode }}" alt="{{ row.desc or row.id }}"></a><div><code class="small">{{ row.id[-12:] }}</code></div>
+          <form method="post" action="/stickers/favorite" class="star-form">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="id" value="{{ row.id }}">
+            <input type="hidden" name="q" value="{{ q }}">
+            <input type="hidden" name="favorite" value="{{ '0' if row.favorite else '1' }}">
+            <button class="btn btn-sm {{ 'btn-primary' if row.favorite else 'btn-outline-secondary' }}" type="submit" title="标记/取消常用">{{ '★ 常用' if row.favorite else '☆ 设为常用' }}</button>
+          </form></td>
+        <td class="muted small">{{ row.desc or '-' }}</td>
+        <td>
+          <form method="post" action="/stickers/note" class="note-form">
+            <input type="hidden" name="csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="id" value="{{ row.id }}">
+            <input class="form-control form-control-sm note" name="localNote" value="{{ row.localNote }}" maxlength="200" placeholder="画面描述">
+            <input class="form-control form-control-sm tags" name="tags" value="{{ row.tags|join(',') }}" placeholder="标签,逗号分隔">
+            <button class="btn btn-sm btn-outline-primary" type="submit">保存</button>
+          </form>
+        </td>
+        <td class="muted small">{{ row.tags|join(', ') }}</td>
+        <td>{{ row.useCount }}</td>
+        <td></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">没有表情（桥接离线，或表情库为空）。</p>
+  {% endif %}
+</section>
+{% endblock %}
