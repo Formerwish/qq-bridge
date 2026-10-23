@@ -694,3 +694,19 @@ html[data-theme="dark"] .tool-card { background: #1b1e24; }
 .gl-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .gl-row .gl-groups { flex: 1 1 260px; min-width: 200px; }
 .gl-row .gl-minute, .gl-row .gl-hour { width: 120px; }
+
+/* 页面操作：固定在右上角，滚动不消失 */
+.page-actions {
+  position: fixed; top: 64px; right: 24px; z-index: 950;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 14px;
+  background: color-mix(in srgb, var(--panel, #fff) 92%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .10);
+  backdrop-filter: blur(8px);
+}
+.page-actions .btn { white-space: nowrap; }
+.is-moved { display: none !important; }
+html[data-theme="dark"] .page-actions { background: rgba(27, 30, 36, .92); }
+@media (max-width: 720px) {
+  .page-actions { top: auto; bottom: 16px; right: 12px; left: 12px; justify-content: flex-end; }
+}

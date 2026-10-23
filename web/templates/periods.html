@@ -86,9 +86,9 @@
             <div class="gl-list">
               {% for gl in row.groupLimits %}
               <div class="gl-row">
-                <input class="pv-input gl-groups" value="{{ gl.groups }}" placeholder="群号，逗号分隔">
-                <input class="pv-input gl-minute" type="number" min="1" value="{{ gl.perMinute }}" placeholder="每分钟">
-                <input class="pv-input gl-hour" type="number" min="1" value="{{ gl.perHour }}" placeholder="每小时">
+                <input class="pv-input gl-groups" title="群号，逗号分隔" value="{{ gl.groups }}" placeholder="群号，逗号分隔">
+                <input class="pv-input gl-minute" title="每分钟上限" type="number" min="1" value="{{ gl.perMinute }}" placeholder="每分钟">
+                <input class="pv-input gl-hour" title="每小时上限" type="number" min="1" value="{{ gl.perHour }}" placeholder="每小时">
                 <button class="pv-del gl-del" type="button">删除</button>
               </div>
               {% endfor %}

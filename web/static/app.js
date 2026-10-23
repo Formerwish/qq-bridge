@@ -455,3 +455,36 @@
     list.querySelectorAll('.period-row').forEach(syncSpec);
   });
 })();
+
+// ── 页面保存类按钮：移动到右上角固定操作条 ──────────────────
+(function () {
+  const isPageAction = (btn) => /保存|计算命中|创建|应用/.test(btn.textContent || '');
+  const buttons = [...document.querySelectorAll('button[type="submit"].btn-primary')]
+    .filter((btn) => isPageAction(btn) && !btn.closest('table') && !btn.closest('.inline') && !btn.closest('.star-form'));
+  if (!buttons.length || document.querySelector('.page-actions')) return;
+
+  const byForm = new Map();
+  for (const btn of buttons) {
+    const form = btn.form || btn.closest('form');
+    if (!form) continue;
+    if (!byForm.has(form)) byForm.set(form, []);
+    byForm.get(form).push(btn);
+  }
+
+  const bar = document.createElement('div');
+  bar.className = 'page-actions';
+  bar.setAttribute('role', 'toolbar');
+  bar.setAttribute('aria-label', '本页操作');
+
+  let index = 0;
+  for (const [form, list] of byForm) {
+    if (!form.id) form.id = 'page-form-' + index++;
+    const source = list[0];
+    const clone = source.cloneNode(true);
+    clone.setAttribute('form', form.id);
+    if (source.disabled) clone.disabled = true;
+    bar.appendChild(clone);
+    list.forEach((btn) => btn.classList.add('is-moved'));
+  }
+  if (bar.children.length) document.body.appendChild(bar);
+})();
