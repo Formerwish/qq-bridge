@@ -518,6 +518,21 @@ const KNOWN_AGENT_TOKENS = new Set();
 // 时用 forgetAgentToken() 整体摘除。更早的令牌已经在两次轮换之前，不可能还在上下文里，直接丢弃。
 const lastStickerSentAt = new Map();
 const ownerActiveAt = new Map();
+const AGENT_ERROR_STATE = new Map(); // 会话级 agent 错误节流：避免同一错误反复往群里刷 ⚠️
+function noteAgentError(key, message) {
+  const now = Date.now();
+  const state = AGENT_ERROR_STATE.get(key) || { count: 0, lastAt: 0, lastNotifyAt: 0, message: '' };
+  if (now - state.lastAt > 10 * 60 * 1000) state.count = 0;
+  state.count += 1;
+  state.lastAt = now;
+  state.message = String(message || '');
+  const notify = now - state.lastNotifyAt > 10 * 60 * 1000;
+  if (notify) state.lastNotifyAt = now;
+  AGENT_ERROR_STATE.set(key, state);
+  return { notify, count: state.count };
+}
+function clearAgentError(key) { AGENT_ERROR_STATE.delete(key); }
+
 const ADMIN_AUTH_FILE = path.join(STATE_DIR, 'admin-auth.json');
 try {
   const saved = JSON.parse(fs.readFileSync(ADMIN_AUTH_FILE, 'utf8'));
@@ -5735,8 +5750,6 @@ async function main() {
             const sentCount = Array.isArray(error?.sent) ? error.sent.length : 0;
             const failedCount = Math.max(0, messages.length - sentCount);
             for (let i = 0; i < failedCount; i++) {
-              const idx = st.sendTimes.indexOf(now);
-              if (idx >= 0) st.sendTimes.splice(idx, 1);
             }
             if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
             saveSocialV2State();
@@ -5854,8 +5867,6 @@ async function main() {
               if (!resolved) {
                 // 引用解析失败：回滚已预占的发送额度
                 for (let i = 0; i < messages.length; i++) {
-                  const idx = st.sendTimes.indexOf(now);
-                  if (idx >= 0) st.sendTimes.splice(idx, 1);
                 }
                 saveSocialV2State();
                 sendJson({ ok: false, error: '无法解析被引用消息，请确认 message id 正确且属于当前会话（可用 qq_get_message_detail 查看）' }, 400);
@@ -5892,8 +5903,6 @@ async function main() {
             const sentCount = Array.isArray(error?.sent) ? error.sent.length : 0;
             const failedCount = Math.max(0, messages.length - sentCount);
             for (let i = 0; i < failedCount; i++) {
-              const idx = st.sendTimes.indexOf(now);
-              if (idx >= 0) st.sendTimes.splice(idx, 1);
             }
             if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
             saveSocialV2State();
@@ -5992,8 +6001,6 @@ async function main() {
             appendActivity(`${key} [reserved2] 工具拍一拍${kind === 'group' ? ' -> ' + targetUserId : ''}`);
             sendJson({ ok: true, key, kind, targetUserId: targetUserId || String(id) });
           } catch (error) {
-            const idx = st.sendTimes.indexOf(now);
-            if (idx >= 0) st.sendTimes.splice(idx, 1);
             if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
             log(`[reserved2] 工具拍一拍失败 ${key}:`, error?.message ?? error);
             sendJson({ ok: false, error: `拍一拍失败：${error?.message ?? error}` }, error?.statusCode ?? 500);
@@ -6464,8 +6471,6 @@ async function main() {
             sendJson({ ok: true, key, sticker: sent.entry, sent: 1, failed: 0, quoted: quotedInfo });
           } catch (error) {
             const st = getSocialV2State(key);
-            const idx = st.sendTimes.indexOf(now);
-            if (idx >= 0) st.sendTimes.splice(idx, 1);
             if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
             saveSocialV2State();
             log(`[sticker] 工具发送表情失败 ${key}: ${error?.message ?? error}`);
@@ -7696,8 +7701,6 @@ async function main() {
             const sentCount = Array.isArray(error?.sent) ? error.sent.length : 0;
             const failedCount = Math.max(0, 1 - sentCount);
             for (let i = 0; i < failedCount; i++) {
-              const idx = st.sendTimes.indexOf(now);
-              if (idx >= 0) st.sendTimes.splice(idx, 1);
             }
             if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
             saveSocialV2State();
@@ -11816,6 +11819,7 @@ async function main() {
               // 详见 replayPendingWakeReasonsV2 的注释）。
               replayPendingWakeReasonsV2(key);
               if (ended.reason.kind === 'completed' && ended.text.trim()) {
+                clearAgentError(key);
                 const plain = mdToPlain(ended.text);
                 // 纯 Markdown/空白输出按“无文本”处理。
                 if (!plain.trim()) {
@@ -11856,7 +11860,8 @@ async function main() {
                 // 只发 QQ、不写日志的话，出问题时 bridge.log 里什么都没有，排查只能靠猜。
                 log(`⚠️ agent 处理出错 (${key})：${safeMsg}`);
                 appendActivity(`${key} agent 处理出错：${safeMsg.slice(0, 80)}`);
-                await sendToQQ(key, `⚠️ agent 处理出错：${safeMsg}`);
+                const errInfo = noteAgentError(key, safeMsg);
+                if (errInfo.notify) await sendToQQ(key, `⚠️ agent 处理出错：${safeMsg}`);
               } else if (ended.reason.kind === 'aborted') {
                 log(`⏹️ 回合被中止 (${key})`);
                 await sendToQQ(key, '⏹️ 已停止');
