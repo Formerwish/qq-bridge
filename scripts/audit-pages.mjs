@@ -4,10 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import puppeteer from 'puppeteer-core';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = 'E:/qq-bridge';
-const BASE = 'http://127.0.0.1:21001';
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const BASE = process.env.QQ_CONSOLE_URL || 'http://127.0.0.1:21001';
+const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const shots = process.argv.includes('--shots');
 const OUT = path.join(ROOT, 'state/screenshots/audit');
 fs.mkdirSync(OUT, { recursive: true });
@@ -24,8 +25,8 @@ function mint() {
 const pages = [
   ['/', 'dashboard'],
   ['/sessions', 'sessions'],
-  ['/sessions?key=group:1039085100', 'session-group'],
-  ['/sessions?key=private:583937437', 'session-private'],
+  ['/sessions?key=group:123456789', 'session-group'],
+  ['/sessions?key=private:123456789', 'session-private'],
   ['/periods', 'periods'],
   ['/kb', 'kb'],
   ['/slang', 'slang'],

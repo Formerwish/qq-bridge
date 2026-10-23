@@ -38,7 +38,7 @@ if (!stats.ok) failed = true;
 
 const loaded = await db.loadAll();
 if (!loaded.ok) {
-  console.error('\n读库失败：检查 kb.mysql 与 kb_slang 表（先跑 E:\\qq-kb-admin\\migrate.py）。');
+  console.error('\n读库失败：检查 kb.mysql 连接与 kb_slang 表。');
   process.exit(1);
 }
 console.log(`\n[读库] ${loaded.entries.length} 条；最近 5 条：`);

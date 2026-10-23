@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from db import execute, load_config, query
 
 CFG = load_config()
-DEFAULT_JSON = (CFG.get("bridge") or {}).get("slangJson") or r"E:\qq-bridge-0.2.0-r4\state\slang.json"
+DEFAULT_JSON = (CFG.get("bridge") or {}).get("slangJson") or r"..\state\slang.json"
 
 
 def ms_of(value: str | None) -> int:

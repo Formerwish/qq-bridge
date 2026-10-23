@@ -5,11 +5,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import puppeteer from 'puppeteer-core';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = 'E:/qq-bridge';
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OUT = path.join(ROOT, 'state/screenshots');
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const BASE = 'http://127.0.0.1:21001';
+const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const BASE = process.env.QQ_CONSOLE_URL || 'http://127.0.0.1:21001';
 
 function mintToken() {
   const secret = fs.readFileSync(path.join(ROOT, 'state/web-secret'), 'utf8').trim();

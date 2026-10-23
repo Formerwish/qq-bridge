@@ -257,7 +257,7 @@ proactive = false
 sendMaxPerHour = 100
 
 # 分群限额（可选）：给名单内的群追加单独限制；未列出的群只受上面的合计限额约束。
-groupLimits = [ { groups = ["1039085100"], perMinute = 3, perHour = 30 } ]
+groupLimits = [ { groups = ["123456789"], perMinute = 3, perHour = 30 } ]
 
 [[periods]]
 name = "高峰-下午"

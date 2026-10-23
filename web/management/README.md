@@ -18,7 +18,7 @@
 AI 不确定时 → qq_kb_search("机械师 BLK.TRACY") → 全文检索返回标题+摘要
 ```
 
-- 桥接侧配置在 `E:\qq-bridge-0.2.0-r4\config.json` 的 `kb` 段（默认只读账号、`cacheTtlMs: 60000`）。
+- 桥接侧配置在 `D:\qq-bridge\config.json` 的 `kb` 段（默认只读账号、`cacheTtlMs: 60000`）。
 - 桥接**只读**：它只会 `SELECT`，不会写库；写权限只在本后台。
 - 改完条目**不需要重启桥接**；改 `config.json` 才需要重启。
 
@@ -109,7 +109,7 @@ run.bat         一键启动
 
 ```bat
 .venv\Scripts\python.exe migrate.py --no-admin   :: 建 kb_slang / kb_slang_revision
-.venv\Scripts\python.exe import_slang.py         :: 导入 ..\qq-bridge-0.2.0-r4\state\slang.json
+.venv\Scripts\python.exe import_slang.py         :: 导入 ..\qq-bridge\state\slang.json
 ```
 
 冲突规则：桥接和管理端都用 `updated_ms` 判断新旧，**谁改得晚听谁的**；桥接每 60 秒拉一次后台的改动。

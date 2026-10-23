@@ -109,13 +109,13 @@ test('数据库行 → 条目（JSON 还原 + 毫秒转 ISO）', () => {
   const row = {
     id: 'abc', content: '你沙溢丝', meaning: '你什么意思', usage: '吐槽', example: '', risk: '',
     status: 'confirmed', source: 'ai', count: 3,
-    sources_json: '["群980797902"]', evidence_json: '[{"sender":"甲","text":"你沙溢丝"}]',
+    sources_json: '["群123456789"]', evidence_json: '[{"sender":"甲","text":"你沙溢丝"}]',
     last_inference_count: 1, created_ms: 1700000000000, updated_ms: 1700000005000
   };
   const e = slangRowToEntry(row);
   assert.equal(e.id, 'abc');
   assert.equal(e.usage, '吐槽');
-  assert.deepEqual(e.sources, ['群980797902']);
+  assert.deepEqual(e.sources, ['群123456789']);
   assert.equal(e.evidence[0].sender, '甲');
   assert.equal(e.createdAt, new Date(1700000000000).toISOString());
   assert.equal(e.updatedAt, new Date(1700000005000).toISOString());
