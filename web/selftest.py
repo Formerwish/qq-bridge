@@ -97,7 +97,7 @@ def main() -> int:
     r = client.get("/sessions")
     check("会话页可渲染", r.status_code == 200 and ("桥接离线" in r.get_data(as_text=True) or "会话" in r.get_data(as_text=True)))
     r = client.get("/sessions?key=group:1")
-    check("会话详情可渲染", r.status_code == 200 and ("桥接离线" in r.get_data(as_text=True) or "会话" in r.get_data(as_text=True)))
+    check("未知会话不创建状态", r.status_code == 404 or "会话不存在" in r.get_data(as_text=True) or "桥接离线" in r.get_data(as_text=True))
     r = client.get("/tools")
     check("工具页可渲染", r.status_code == 200 and "工具开关" in r.get_data(as_text=True) and "qq_kb_search" in r.get_data(as_text=True))
 

@@ -3775,7 +3775,7 @@ async function main() {
         const sessionMatch = /^\/internal\/sessions\/(group:\d+|private:\d+)$/.exec(url.pathname);
         if (req.method === 'GET' && sessionMatch) {
           const key = decodeURIComponent(sessionMatch[1]);
-          const st = getSocialV2State(key);
+          const st = peekSocialV2State(key);
           if (!st) { sendJson({ ok: false, error: '会话不存在' }, 404); return; }
           sendJson({
             ok: true,
@@ -9127,6 +9127,14 @@ async function main() {
     }
 
 
+
+    function peekSocialV2State(key) {
+      const canonical = canonicalV2Key(key);
+      if (!canonical) return null;
+      const st = socialV2.conversations.get(canonical);
+      if (st) normalizePrivateWakeConfigV2(canonical, st);
+      return st || null;
+    }
 
   function getSocialV2State(key) {
     // 只允许内部约定的会话 key 格式，并统一成无前导零的正整数形式，防止同一会话分裂成多个状态。
