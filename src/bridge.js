@@ -529,7 +529,7 @@ function noteAgentError(key, message) {
   const notify = now - state.lastNotifyAt > 10 * 60 * 1000;
   if (notify) state.lastNotifyAt = now;
   AGENT_ERROR_STATE.set(key, state);
-  return { notify, count: state.count };
+  return { notify, count: state.count, state };
 }
 function clearAgentError(key) { AGENT_ERROR_STATE.delete(key); }
 
@@ -10928,6 +10928,58 @@ async function main() {
     return Math.min(60000, Math.max(...positive));
   }
 
+
+  async function notifyOwnerError(key, message) {
+    const owner = String(cfg.ownerQQ ?? '').trim();
+    if (!owner) return;
+    try {
+      await sendToQQ('private:' + owner, `⚠️ ${key} 处理出错：${message}`);
+    } catch (error) {
+      log(`[通知] 私聊管理员失败：${error?.message ?? error}`);
+    }
+  }
+
+  async function recoverSessionContext(key, reason) {
+    const old = state.sessions[key];
+    if (!old) return false;
+    const st = getSocialV2State(key);
+    sessionEpoch++;
+    delete state.sessions[key];
+    modelAppliedSessions.delete(old);
+    delete state.sessionPolicies[key];
+    reverse.delete(old);
+    collectors.delete(old);
+    sendToolSucceededSessions.delete(old);
+    pendingSendToolCalls.delete(old);
+    v2TurnStartAt.delete(old);
+    turnLeaseNoted.delete(old);
+    toolCallNames.delete(old);
+    silentTurns.delete(old);
+    const pe = pending.get(key);
+    if (pe) { clearTimeout(pe.timer); cancelPendingEntry(pe).catch(() => {}); }
+    pending.delete(key);
+    queued.delete(key);
+    queuedHintAt.delete(key);
+    sessionPromises.delete(key);
+    drainPromptQueue(key, '会话上下文异常，已重建');
+    clearSocialV2Timers(key);
+    pendingWakeKeys.delete(key);
+    wakeConfigUpdatedKeys.delete(key);
+    markReadCalledKeys.delete(key);
+    wakeConfigMissCount.delete(key);
+    forgetAgentToken(key);
+    if (st) {
+      st.wakeErrorBackoffUntil = Date.now() + 60_000;
+      st.lastWakeReason = 'context-recovery';
+    }
+    saveState();
+    try { await withTimeout(api.stopSessionWork(old), DSH_CONTROL_TIMEOUT_MS, 'stopSessionWork'); } catch {}
+    try { await withTimeout(api.workspace.archiveSession({ sessionId: old }), DSH_CONTROL_TIMEOUT_MS, 'archiveSession'); } catch {}
+    log(`[自愈] ${key} 上下文异常（${reason}），已重建 DSH 会话（未读/唤醒配置保留）`);
+    appendActivity(`${key} 上下文异常，已自动重建会话`);
+    return true;
+  }
+
   function scheduleWakeV2(key, reason) {
     if (cfg.socialV2?.enabled === false) return;
     if (socialV2.paused) return;
@@ -10954,6 +11006,17 @@ async function main() {
         if (st.pendingWakeReasons.length > 20) st.pendingWakeReasons.splice(0, st.pendingWakeReasons.length - 20);
       }
       log(`[reserved2] 会话繁忙，暂存唤醒原因 ${key}（${reason}@seq${seq}，原因=${busyReasonV2(key, st)}）`);
+      return;
+    }
+    const errorBackoff = Number(st.wakeErrorBackoffUntil || 0) - Date.now();
+    if (errorBackoff > 0) {
+      log(`[自愈] ${key} 错误退避中，${Math.ceil(errorBackoff / 1000)}s 后重试`);
+      if (st.quotaRetryTimer) clearTimeout(st.quotaRetryTimer);
+      st.quotaRetryTimer = setTimeout(() => {
+        st.quotaRetryTimer = null;
+        scheduleWakeV2(key, reason);
+      }, errorBackoff);
+      st.quotaRetryTimer.unref?.();
       return;
     }
     const quotaRetryMs = wakeQuotaRetryMs(key);
@@ -11861,7 +11924,16 @@ async function main() {
                 log(`⚠️ agent 处理出错 (${key})：${safeMsg}`);
                 appendActivity(`${key} agent 处理出错：${safeMsg.slice(0, 80)}`);
                 const errInfo = noteAgentError(key, safeMsg);
-                if (errInfo.notify) await sendToQQ(key, `⚠️ agent 处理出错：${safeMsg}`);
+                if (errInfo.notify) await notifyOwnerError(key, safeMsg);
+                const recoverable = /Messages request failed \(400\)|context length|invalid request|too many tokens/i.test(safeMsg);
+                if (recoverable && errInfo.count >= 3 && Date.now() - Number(errInfo.state.lastRecoverAt || 0) > 10 * 60 * 1000) {
+                  errInfo.state.lastRecoverAt = Date.now();
+                  errInfo.state.count = 0;
+                  const recovered = await recoverSessionContext(key, safeMsg);
+                  if (recovered) await notifyOwnerError(key, '上下文连续请求失败，已自动重建会话；未读消息保留');
+                } else if (recoverable && errInfo.count >= 3) {
+                  getSocialV2State(key).wakeErrorBackoffUntil = Date.now() + 60_000;
+                }
               } else if (ended.reason.kind === 'aborted') {
                 log(`⏹️ 回合被中止 (${key})`);
                 await sendToQQ(key, '⏹️ 已停止');

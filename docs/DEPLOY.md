@@ -183,7 +183,7 @@ web\.venv\Scripts\python -m pip install -r web\requirements.txt
 | --- | --- |
 | 控制台打不开 | 看控制台窗口是否在跑；`netstat -ano | findstr :21001` |
 | 桥接 3100 不通 | 看 `state\bridge.log`；DSH/SnowLuma 是否在线 |
-| AI 不回消息 | 先看桥接日志是否收到消息/唤醒；再确认 DSH 会话是否卡住，可在"会话"页重置 |
+| AI 不回消息 / 反复 400 | 先看桥接日志；连续 400 会自动重建会话并私聊管理员；仍不行在"会话"页重置上下文 |
 | MCP 工具没出现 | 重新跑 `node scripts\setup-dsh.mjs` 并重启 DSH |
 | 知识库不生效 | 检查 `kb.mysql` 连接与 `kb.enabled`；"知识库"页应能搜到条目 |
 | 改配置保存失败 | 看控制台提示与 `state\bridge.log`；敏感项需要重启 |
