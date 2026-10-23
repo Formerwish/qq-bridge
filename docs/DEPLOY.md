@@ -65,7 +65,7 @@ notepad config.toml
 - `[socialV2.tools]`：各 `qq_*` 工具开关（控制台"工具"页可视化）
 - `[socialV2.wake]` / `[socialV2.send]` / `[socialV2.wait]`：唤醒、发送节奏、等待
 - `[socialV2.sticker]`：表情库、自动补图概率（0~1 小数）
-- `[[periods]]`：峰谷时段覆盖（回复概率、推理强度、发送上限、价格）
+- `[[periods]]`：峰谷时段覆盖（回复概率、推理强度、发送上限、价格）；`groupLimits` 可给指定群追加每分钟/每小时限额
 - `[kb]` / `[slang]`：知识库与黑话开关、注入参数
 - `[pricing.models.*]`：自定义模型价格（元/百万 token）
 

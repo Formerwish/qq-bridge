@@ -5706,17 +5706,11 @@ async function main() {
           const st = getSocialV2State(key);
           const now = Date.now();
           try {
-            const periodSend = overridesAt(cfg.periods, new Date());
-            const maxPerMinute = Number(periodSend.sendMaxPerMinute ?? sendCfg.maxSendPerMinute) || 0;
-            const maxPerHour = Number(periodSend.sendMaxPerHour ?? sendCfg.maxSendPerHour) || 0;
-            const recentMinute = (st.sendTimes || []).filter((t) => now - t < 60000).length;
-            const recentHour = (st.sendTimes || []).filter((t) => now - t < 3600000).length;
-            if ((maxPerMinute > 0 && recentMinute + messages.length > maxPerMinute) || (maxPerHour > 0 && recentHour + messages.length > maxPerHour)) {
-              sendJson({ ok: false, error: '发送频率超限，请稍后再试' }, 429);
-              return;
-            }
+            const quotaError = sendQuotaError(key, st, messages.length, now);
+            if (quotaError) { sendJson({ ok: false, error: quotaError }, 429); return; }
             // 先预占发送额度，避免并发绕过限频
             for (let i = 0; i < messages.length; i++) st.sendTimes.push(now);
+            noteGlobalSend(key, now, messages.length);
             if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
             const delays = computeGapsV2(messages, 'auto', undefined, undefined, sendCfg);
             const sentMessages = await sendMessagesV2(key, messages, delays);
@@ -5839,17 +5833,11 @@ async function main() {
           // 先做发送频率检查并预占额度，再解析引用目标，避免未限流的引用查询打爆 OneBot。
           const st = getSocialV2State(key);
           const now = Date.now();
-          const periodSend = overridesAt(cfg.periods, new Date());
-          const maxPerMinute = Number(periodSend.sendMaxPerMinute ?? sendCfg.maxSendPerMinute) || 0;
-          const maxPerHour = Number(periodSend.sendMaxPerHour ?? sendCfg.maxSendPerHour) || 0;
-          const recentMinute = (st.sendTimes || []).filter((t) => now - t < 60000).length;
-          const recentHour = (st.sendTimes || []).filter((t) => now - t < 3600000).length;
-          if ((maxPerMinute > 0 && recentMinute + messages.length > maxPerMinute) || (maxPerHour > 0 && recentHour + messages.length > maxPerHour)) {
-            sendJson({ ok: false, error: '发送频率超限，请稍后再试' }, 429);
-            return;
-          }
+          const quotaError = sendQuotaError(key, st, messages.length, now);
+          if (quotaError) { sendJson({ ok: false, error: quotaError }, 429); return; }
           // 先预占发送额度，避免并发绕过限频
           for (let i = 0; i < messages.length; i++) st.sendTimes.push(now);
+          noteGlobalSend(key, now, messages.length);
           if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
           let quotedInfo = null;
           let actualReplyToMessageId = replyToMessageId;
@@ -5949,16 +5937,10 @@ async function main() {
           const st = getSocialV2State(key);
           const sendCfg = cfg.socialV2?.send ?? {};
           const now = Date.now();
-          const periodSend = overridesAt(cfg.periods, new Date());
-          const maxPerMinute = Number(periodSend.sendMaxPerMinute ?? sendCfg.maxSendPerMinute) || 0;
-          const maxPerHour = Number(periodSend.sendMaxPerHour ?? sendCfg.maxSendPerHour) || 0;
-          const recentMinute = (st.sendTimes || []).filter((t) => now - t < 60000).length;
-          const recentHour = (st.sendTimes || []).filter((t) => now - t < 3600000).length;
-          if ((maxPerMinute > 0 && recentMinute + 1 > maxPerMinute) || (maxPerHour > 0 && recentHour + 1 > maxPerHour)) {
-            sendJson({ ok: false, error: '发送频率超限，请稍后再试' }, 429);
-            return;
-          }
+          const quotaError = sendQuotaError(key, st, 1, now);
+          if (quotaError) { sendJson({ ok: false, error: quotaError }, 429); return; }
           st.sendTimes.push(now);
+          noteGlobalSend(key, now, 1);
           if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
           // 成员校验是异步的（要问 OneBot）；期间操作者可能切模式/改白名单/开静默。
           // 拍一拍也要走发送守卫：真正发之前再确认一次。
@@ -6438,16 +6420,10 @@ async function main() {
           const now = Date.now();
           try {
             const st = getSocialV2State(key);
-            const periodSend = overridesAt(cfg.periods, new Date());
-            const maxPerMinute = Number(periodSend.sendMaxPerMinute ?? sendCfg.maxSendPerMinute) || 0;
-            const maxPerHour = Number(periodSend.sendMaxPerHour ?? sendCfg.maxSendPerHour) || 0;
-            const recentMinute = (st.sendTimes || []).filter((t) => now - t < 60000).length;
-            const recentHour = (st.sendTimes || []).filter((t) => now - t < 3600000).length;
-            if ((maxPerMinute > 0 && recentMinute + 1 > maxPerMinute) || (maxPerHour > 0 && recentHour + 1 > maxPerHour)) {
-              sendJson({ ok: false, error: '发送频率超限，请稍后再试' }, 429);
-              return;
-            }
+            const quotaError = sendQuotaError(key, st, 1, now);
+            if (quotaError) { sendJson({ ok: false, error: quotaError }, 429); return; }
             st.sendTimes.push(now);
+            noteGlobalSend(key, now, 1);
             if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
             const sent = await sendStickerV2(key, stickerId, {
               replyToMessageId: actualReplyToMessageId,
@@ -7696,16 +7672,10 @@ async function main() {
           const st = getSocialV2State(key);
           const now = Date.now();
           try {
-            const periodSend = overridesAt(cfg.periods, new Date());
-            const maxPerMinute = Number(periodSend.sendMaxPerMinute ?? sendCfg.maxSendPerMinute) || 0;
-            const maxPerHour = Number(periodSend.sendMaxPerHour ?? sendCfg.maxSendPerHour) || 0;
-            const recentMinute = (st.sendTimes || []).filter((t) => now - t < 60000).length;
-            const recentHour = (st.sendTimes || []).filter((t) => now - t < 3600000).length;
-            if ((maxPerMinute > 0 && recentMinute + 1 > maxPerMinute) || (maxPerHour > 0 && recentHour + 1 > maxPerHour)) {
-              sendJson({ ok: false, error: '发送频率超限，请稍后再试' }, 429);
-              return;
-            }
+            const quotaError = sendQuotaError(key, st, 1, now);
+            if (quotaError) { sendJson({ ok: false, error: quotaError }, 429); return; }
             st.sendTimes.push(now);
+            noteGlobalSend(key, now, 1);
             if (st.sendTimes.length > 500) st.sendTimes = st.sendTimes.slice(-500);
             const sentMessages = await sendMessagesV2(key, [message], [], actualReplyToMessageId, atUserId);
             recordSentMessagesV2(key, sentMessages);
@@ -10882,6 +10852,79 @@ async function main() {
     return TIMER_WAKE_REASONS.has(String(reason ?? '').split(':')[0]);
   }
 
+
+  // ── 发送限额（全部聊天合计 + 分群）─────────────────────────────
+  // 计数只保存在内存：进程重启后窗口清空，宁可短暂放宽也不误锁。
+  const GLOBAL_SEND_TIMES = [];
+  function isOwnerPrivate(key) {
+    const owner = String(cfg.ownerQQ ?? '').trim();
+    return Boolean(owner) && key === 'private:' + owner;
+  }
+  function noteGlobalSend(key, at = Date.now(), count = 1) {
+    if (isOwnerPrivate(key)) return;
+    for (let i = 0; i < count; i++) GLOBAL_SEND_TIMES.push(at);
+    const cutoff = at - 2 * 3600000;
+    while (GLOBAL_SEND_TIMES.length && GLOBAL_SEND_TIMES[0] < cutoff) GLOBAL_SEND_TIMES.shift();
+    if (GLOBAL_SEND_TIMES.length > 5000) GLOBAL_SEND_TIMES.splice(0, GLOBAL_SEND_TIMES.length - 5000);
+  }
+  function countRecent(times, windowMs, now = Date.now()) {
+    let n = 0;
+    for (const at of times || []) if (now - at < windowMs) n++;
+    return n;
+  }
+  function currentSendCaps(period) {
+    const sendCfg = cfg.socialV2?.send ?? {};
+    return {
+      minute: Number(period?.sendMaxPerMinute ?? sendCfg.maxSendPerMinute) || 0,
+      hour: Number(period?.sendMaxPerHour ?? sendCfg.maxSendPerHour) || 0
+    };
+  }
+  function groupLimitFor(period, key) {
+    if (!key.startsWith('group:')) return null;
+    const id = key.slice('group:'.length);
+    for (const item of period?.groupLimits || []) {
+      if (Array.isArray(item?.groups) && item.groups.includes(id)) return item;
+    }
+    return null;
+  }
+  function sendQuotaError(key, st, addCount = 1, now = Date.now()) {
+    if (isOwnerPrivate(key)) return null;
+    const period = overridesAt(cfg.periods, new Date(now));
+    const caps = currentSendCaps(period);
+    const group = groupLimitFor(period, key);
+    const globalMinute = countRecent(GLOBAL_SEND_TIMES, 60000, now);
+    const globalHour = countRecent(GLOBAL_SEND_TIMES, 3600000, now);
+    const ownMinute = countRecent(st?.sendTimes, 60000, now);
+    const ownHour = countRecent(st?.sendTimes, 3600000, now);
+    if (caps.minute > 0 && globalMinute + addCount > caps.minute) return '发送频率超限：全部聊天合计的每分钟额度已用完，稍后再试';
+    if (caps.hour > 0 && globalHour + addCount > caps.hour) return '发送频率超限：全部聊天合计的每小时额度已用完，稍后再试';
+    if (group?.perMinute > 0 && ownMinute + addCount > group.perMinute) return '发送频率超限：本群每分钟额度已用完，稍后再试';
+    if (group?.perHour > 0 && ownHour + addCount > group.perHour) return '发送频率超限：本群每小时额度已用完，稍后再试';
+    return null;
+  }
+  function wakeQuotaRetryMs(key, now = Date.now()) {
+    if (isOwnerPrivate(key)) return 0;
+    const period = overridesAt(cfg.periods, new Date(now));
+    const caps = currentSendCaps(period);
+    const group = groupLimitFor(period, key);
+    const st = peekSocialV2State(key);
+    const waits = [];
+    const overflow = (times, windowMs, cap) => {
+      if (!cap) return 0;
+      const list = (times || []).filter((at) => now - at < windowMs).sort((a, b) => a - b);
+      if (list.length < cap) return 0;
+      const oldest = list[list.length - cap];
+      return Math.max(1000, windowMs - (now - oldest) + 250);
+    };
+    waits.push(overflow(GLOBAL_SEND_TIMES, 60000, caps.minute));
+    waits.push(overflow(GLOBAL_SEND_TIMES, 3600000, caps.hour));
+    waits.push(overflow(st?.sendTimes, 60000, group?.perMinute));
+    waits.push(overflow(st?.sendTimes, 3600000, group?.perHour));
+    const positive = waits.filter((ms) => ms > 0);
+    if (!positive.length) return 0;
+    return Math.min(60000, Math.max(...positive));
+  }
+
   function scheduleWakeV2(key, reason) {
     if (cfg.socialV2?.enabled === false) return;
     if (socialV2.paused) return;
@@ -10908,6 +10951,17 @@ async function main() {
         if (st.pendingWakeReasons.length > 20) st.pendingWakeReasons.splice(0, st.pendingWakeReasons.length - 20);
       }
       log(`[reserved2] 会话繁忙，暂存唤醒原因 ${key}（${reason}@seq${seq}，原因=${busyReasonV2(key, st)}）`);
+      return;
+    }
+    const quotaRetryMs = wakeQuotaRetryMs(key);
+    if (quotaRetryMs > 0) {
+      log(`[限额] ${key} 暂停唤醒 ${Math.ceil(quotaRetryMs / 1000)}s（发送额度已用完，不消耗 token）`);
+      if (st.quotaRetryTimer) clearTimeout(st.quotaRetryTimer);
+      st.quotaRetryTimer = setTimeout(() => {
+        st.quotaRetryTimer = null;
+        scheduleWakeV2(key, reason);
+      }, quotaRetryMs);
+      st.quotaRetryTimer.unref?.();
       return;
     }
     cancelReplyCheckV2(key); // 真实唤醒已接管，取消普通回复检查，避免 30s 后再补一刀

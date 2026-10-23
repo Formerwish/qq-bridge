@@ -13,7 +13,8 @@
   </div>
   {% if info.overrides %}
   <div class="pv-chips">
-    {% for k, v in info.overrides.items() %}<span class="pv-chip">{{ k }} <b>{{ v }}</b></span>{% endfor %}
+    {% set ov_labels = {'replyProbability':'回复概率','reasoningEffort':'推理强度','model':'模型','proactive':'主动话题','sendMaxPerMinute':'合计每分钟','sendMaxPerHour':'合计每小时','groupLimits':'分群限额'} %}
+    {% for k, v in info.overrides.items() %}<span class="pv-chip">{{ ov_labels.get(k, k) }} <b>{% if k == 'replyProbability' %}{{ (v * 100)|round|int }}%{% elif k == 'groupLimits' %}{{ v|length }} 组{% else %}{{ v }}{% endif %}</b></span>{% endfor %}
   </div>
   {% endif %}
 </div>
@@ -70,12 +71,31 @@
               <option value="off" {{ 'selected' if row.proactive is sameas false else '' }}>关</option>
             </select>
           </label>
-          <label class="pv-field pv-num">每分钟 <input class="pv-input" type="number" name="perMinute" min="1" value="{{ row.perMinute }}" placeholder="不限"></label>
-          <label class="pv-field pv-num">每小时 <input class="pv-input" type="number" name="perHour" min="1" value="{{ row.perHour }}" placeholder="不限"></label>
+          <label class="pv-field pv-num">合计·每分钟 <input class="pv-input" type="number" name="perMinute" min="1" value="{{ row.perMinute }}" placeholder="不限"></label>
+          <label class="pv-field pv-num">合计·每小时 <input class="pv-input" type="number" name="perHour" min="1" value="{{ row.perHour }}" placeholder="不限"></label>
             <label class="pv-field pv-num">价格·命中(元/M) <input class="pv-input" type="number" step="0.01" name="priceCacheHit" value="{{ row.priceCacheHit }}" placeholder="0"></label>
             <label class="pv-field pv-num">价格·未命中 <input class="pv-input" type="number" step="0.01" name="priceCacheMiss" value="{{ row.priceCacheMiss }}" placeholder="0"></label>
             <label class="pv-field pv-num">价格·输出 <input class="pv-input" type="number" step="0.01" name="priceOutput" value="{{ row.priceOutput }}" placeholder="0"></label>
         </div>
+
+          <div class="pv-gl">
+            <div class="pv-gl-head">
+              <span class="pv-label">分群限额</span>
+              <span class="pv-hint">上方「合计·每分钟/每小时」约束全部聊天；这里给指定群追加单独限制，未列出的群只受合计约束。超额时该群暂停唤醒（不消耗 token），额度恢复后自动继续。</span>
+            </div>
+            <div class="gl-list">
+              {% for gl in row.groupLimits %}
+              <div class="gl-row">
+                <input class="pv-input gl-groups" value="{{ gl.groups }}" placeholder="群号，逗号分隔">
+                <input class="pv-input gl-minute" type="number" min="1" value="{{ gl.perMinute }}" placeholder="每分钟">
+                <input class="pv-input gl-hour" type="number" min="1" value="{{ gl.perHour }}" placeholder="每小时">
+                <button class="pv-del gl-del" type="button">删除</button>
+              </div>
+              {% endfor %}
+            </div>
+            <button class="pv-add gl-add" type="button">＋ 分群限额</button>
+            <input type="hidden" name="glSpec" class="gl-spec" value="">
+          </div>
       </div>
     {% endfor %}
   </div>
@@ -120,12 +140,22 @@
             <option value="off">关</option>
           </select>
         </label>
-        <label class="pv-field pv-num">每分钟 <input class="pv-input" type="number" name="perMinute" min="1" placeholder="不限"></label>
-        <label class="pv-field pv-num">每小时 <input class="pv-input" type="number" name="perHour" min="1" placeholder="不限"></label>
+        <label class="pv-field pv-num">合计·每分钟 <input class="pv-input" type="number" name="perMinute" min="1" placeholder="不限"></label>
+        <label class="pv-field pv-num">合计·每小时 <input class="pv-input" type="number" name="perHour" min="1" placeholder="不限"></label>
           <label class="pv-field pv-num">价格·命中(元/M) <input class="pv-input" type="number" step="0.01" name="priceCacheHit" placeholder="0"></label>
           <label class="pv-field pv-num">价格·未命中 <input class="pv-input" type="number" step="0.01" name="priceCacheMiss" placeholder="0"></label>
           <label class="pv-field pv-num">价格·输出 <input class="pv-input" type="number" step="0.01" name="priceOutput" placeholder="0"></label>
       </div>
+
+          <div class="pv-gl">
+            <div class="pv-gl-head">
+              <span class="pv-label">分群限额</span>
+              <span class="pv-hint">上方「合计·每分钟/每小时」约束全部聊天；这里给指定群追加单独限制，未列出的群只受合计约束。超额时该群暂停唤醒（不消耗 token），额度恢复后自动继续。</span>
+            </div>
+            <div class="gl-list"></div>
+            <button class="pv-add gl-add" type="button">＋ 分群限额</button>
+            <input type="hidden" name="glSpec" class="gl-spec" value="">
+          </div>
     </div>
   </template>
 
@@ -136,5 +166,5 @@
   </div>
 </form>
 
-<p class="hint">时间支持跨零点（如 18:00 → 09:00，按开始日归属）；概率滑块拉到 0 表示该时段不覆盖全局概率；主动开启话题三态：不覆盖 / 开 / 关。价格（元/百万 token）用于概览页用量估价，留空按 0 计。</p>
+<p class="hint">时间支持跨零点（如 18:00 → 09:00，按开始日归属）；概率滑块拉到 0 表示该时段不覆盖全局概率；主动开启话题三态：不覆盖 / 开 / 关。价格（元/百万 token）用于概览页用量估价，留空按 0 计。发送额度：合计限额约束除管理员私聊外的全部聊天；分群限额只对名单内的群追加约束。超额时该群暂停唤醒（不消耗 token），额度恢复后自动继续，未读消息保留。</p>
 {% endblock %}

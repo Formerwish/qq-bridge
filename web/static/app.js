@@ -394,3 +394,64 @@
     bar.addEventListener('mouseleave', () => { tip.hidden = true; });
   });
 })();
+
+// ── 峰谷：分群限额编辑 ────────────────────────────────────────
+(function () {
+  const list = document.getElementById('periods-table');
+  const form = document.getElementById('periods-form');
+  if (!list || !form) return;
+
+  const rowHtml = (groups = '', minute = '', hour = '') =>
+    '<input class="pv-input gl-groups" value="' + groups + '" placeholder="群号，逗号分隔">' +
+    '<input class="pv-input gl-minute" type="number" min="1" value="' + minute + '" placeholder="每分钟">' +
+    '<input class="pv-input gl-hour" type="number" min="1" value="' + hour + '" placeholder="每小时">' +
+    '<button class="pv-del gl-del" type="button">删除</button>';
+
+  function syncSpec(row) {
+    const items = [];
+    row.querySelectorAll('.gl-row').forEach((item) => {
+      const groups = (item.querySelector('.gl-groups')?.value || '').trim();
+      const minute = (item.querySelector('.gl-minute')?.value || '').trim();
+      const hour = (item.querySelector('.gl-hour')?.value || '').trim();
+      if (!groups || (!minute && !hour)) return;
+      items.push(groups + ':' + (minute || '0') + ':' + (hour || '0'));
+    });
+    const spec = row.querySelector('.gl-spec');
+    if (spec) spec.value = items.join(';');
+  }
+
+  function initRow(row) {
+    row.querySelectorAll('.gl-row').forEach((item) => {
+      item.querySelectorAll('input').forEach((input) => input.addEventListener('input', () => syncSpec(row)));
+    });
+    syncSpec(row);
+  }
+
+  list.querySelectorAll('.period-row').forEach(initRow);
+
+  list.addEventListener('click', (event) => {
+    const add = event.target.closest('.gl-add');
+    if (add) {
+      const row = add.closest('.period-row');
+      const box = row?.querySelector('.gl-list');
+      if (!row || !box) return;
+      const item = document.createElement('div');
+      item.className = 'gl-row';
+      item.innerHTML = rowHtml();
+      box.appendChild(item);
+      item.querySelectorAll('input').forEach((input) => input.addEventListener('input', () => syncSpec(row)));
+      item.querySelector('.gl-groups')?.focus();
+      return;
+    }
+    const del = event.target.closest('.gl-del');
+    if (del) {
+      const row = del.closest('.period-row');
+      del.closest('.gl-row')?.remove();
+      if (row) syncSpec(row);
+    }
+  });
+
+  form.addEventListener('submit', () => {
+    list.querySelectorAll('.period-row').forEach(syncSpec);
+  });
+})();

@@ -57,6 +57,22 @@ export function normalizeDays(raw) {
   return out.size ? [...out] : null;
 }
 
+function normalizeGroupLimits(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    const groups = (Array.isArray(item?.groups) ? item.groups : [])
+      .map((g) => String(g ?? '').replace(/^group:/, '').trim())
+      .filter((g) => /^\d+$/.test(g));
+    if (!groups.length) continue;
+    const perMinute = Number(item?.perMinute) > 0 ? Math.round(Number(item.perMinute)) : null;
+    const perHour = Number(item?.perHour) > 0 ? Math.round(Number(item.perHour)) : null;
+    if (perMinute === null && perHour === null) continue;
+    out.push({ groups: [...new Set(groups)], perMinute, perHour });
+  }
+  return out;
+}
+
 function normalizeNumber(value, min, max) {
   const num = Number(value);
   if (!Number.isFinite(num)) return null;
@@ -86,7 +102,8 @@ export function normalizePeriods(raw) {
         sendMaxPerMinute: Number.isFinite(Number(item?.sendMaxPerMinute)) && Number(item.sendMaxPerMinute) > 0
           ? Math.round(Number(item.sendMaxPerMinute)) : null,
         sendMaxPerHour: Number.isFinite(Number(item?.sendMaxPerHour)) && Number(item.sendMaxPerHour) > 0
-          ? Math.round(Number(item.sendMaxPerHour)) : null
+          ? Math.round(Number(item.sendMaxPerHour)) : null,
+        groupLimits: normalizeGroupLimits(item?.groupLimits)
       };
     })
     .filter(Boolean);
@@ -131,6 +148,7 @@ export function overridesAt(periods, date = new Date()) {
   for (const key of ['replyProbability', 'reasoningEffort', 'model', 'proactive', 'sendMaxPerMinute', 'sendMaxPerHour']) {
     if (period[key] !== null && period[key] !== undefined) out[key] = period[key];
   }
+  if (Array.isArray(period.groupLimits) && period.groupLimits.length) out.groupLimits = period.groupLimits;
   return out;
 }
 

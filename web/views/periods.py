@@ -1,7 +1,7 @@
 """峰谷策略页：编辑 `[[periods]]`（任意多段），保存后写 config.toml 并让桥接热重载。
 
 字段：名称 / 开始 / 结束（支持跨零点）/ 星期（可空=每天）/ 回复概率(%) /
-推理强度 / 模型 / 主动检查开关 / 每分钟·每小时发送上限。
+推理强度 / 模型 / 主动检查开关 / 全部聊天合计的每分钟·每小时发送上限 / 分群限额（groupLimits）。
 空着的字段不写入 → 该时段不覆盖对应全局默认值。
 """
 
@@ -41,6 +41,14 @@ def _rows_from_config() -> list[dict]:
         "priceOutput": item.get("priceOutput", ""),
         "perMinute": int(item["sendMaxPerMinute"]) if item.get("sendMaxPerMinute") not in (None, "") else "",
             "perHour": int(item["sendMaxPerHour"]) if item.get("sendMaxPerHour") not in (None, "") else "",
+            "groupLimits": [
+                {
+                    "groups": ",".join(str(g) for g in (gl.get("groups") or [])),
+                    "perMinute": gl.get("perMinute") or "",
+                    "perHour": gl.get("perHour") or "",
+                }
+                for gl in (item.get("groupLimits") or []) if isinstance(gl, dict)
+            ],
         })
     return rows
 
@@ -55,6 +63,27 @@ def index():
     except control.BridgeError as exc:
         error = str(exc)
     return render_template("periods.html", rows=_rows_from_config(), efforts=EFFORTS, info=info, error=error)
+
+
+def _parse_group_spec(spec: str) -> list[dict]:
+    """``群号,群号:每分钟:每小时;群号:每分钟:每小时`` → 结构化列表。"""
+    out = []
+    for chunk in (spec or "").split(";"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        parts = [x.strip() for x in chunk.split(":")]
+        if len(parts) < 2:
+            continue
+        groups = [g for g in parts[0].replace("，", ",").split(",") if g.strip().isdigit()]
+        if not groups:
+            continue
+        per_minute = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+        per_hour = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+        if per_minute is None and per_hour is None:
+            continue
+        out.append({"groups": groups, "perMinute": per_minute, "perHour": per_hour})
+    return out
 
 
 def _num(value, scale=1.0):
@@ -83,6 +112,7 @@ def save():
     per_minutes = request.form.getlist("perMinute")
     per_hours = request.form.getlist("perHour")
     proactives = request.form.getlist("proactive")  # 不覆盖 / on / off
+    group_specs = request.form.getlist("glSpec")
 
     periods = []
     for idx, name in enumerate(names):
@@ -103,6 +133,7 @@ def save():
             "priceCacheHit": _num(prices_hit[idx] if idx < len(prices_hit) else ""),
         "priceCacheMiss": _num(prices_miss[idx] if idx < len(prices_miss) else ""),
         "priceOutput": _num(prices_out[idx] if idx < len(prices_out) else ""),
+            "groupLimits": _parse_group_spec(group_specs[idx] if idx < len(group_specs) else ""),
         "sendMaxPerMinute": (int(v) if (v := _num(per_minutes[idx] if idx < len(per_minutes) else "")) is not None else None),
             "sendMaxPerHour": (int(v) if (v := _num(per_hours[idx] if idx < len(per_hours) else "")) is not None else None),
         }

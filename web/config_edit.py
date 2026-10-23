@@ -47,6 +47,8 @@ def _literal(value) -> str:
     if isinstance(value, str):
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
+    if isinstance(value, dict):
+        return "{ " + ", ".join(f"{k} = {_literal(v)}" for k, v in value.items()) + " }"
     if isinstance(value, (list, tuple)):
         return "[" + ", ".join(_literal(item) for item in value) + "]"
     raise ConfigEditError(f"不支持写入的类型：{type(value).__name__}")
