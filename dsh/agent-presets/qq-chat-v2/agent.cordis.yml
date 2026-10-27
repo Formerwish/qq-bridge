@@ -169,6 +169,9 @@
   config:
     - id: compaction-basic
       name: '@deepseek-ai/dsh-compaction-basic'
+      config:
+        # 1M 上下文窗口下，50 万 tokens 触发压缩（默认 80 万），减少每步请求体积。
+        thresholdRatio: 0.5
 
     - id: command-compact
       name: '@deepseek-ai/dsh-command-compact'

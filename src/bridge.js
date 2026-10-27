@@ -10561,16 +10561,15 @@ async function main() {
     // 避免唤醒 prompt 出现两份黑话表。
     const participationText = formatParticipationV2(st);
     const participationLine = participationText ? `${participationText}\n\n` : '';
-    const antiAiLine = '【反AI味】你不是客服：不用有求必应，可以装傻、已读乱回、拒绝推荐；少用“一绝/真管用/保证/绝对”这类词。\n\n';
     const stickerCfg = cfg.socialV2?.sticker ?? {};
+    // 固定规则（反 AI 味、表情策略、首回复节奏、沉睡前观察）都在 preset 系统提示里，只注入一次；
+    // 唤醒提示只带动态内容（表情候选、剩余静默时间等），避免每轮重复占用上下文。
     const stickerLine = stickerCfg.enabled !== false && stickerCfg.includeInPrompt !== false
-      ? `${buildStickerStrategyHint()}\n${buildStickerContext(stickerEntries, stickerCfg.promptMaxStickers ?? 8)}\n\n`
+      ? `${buildStickerContext(stickerEntries, stickerCfg.promptMaxStickers ?? 8)}\n\n`
       : '';
     const preSleepMs = Math.max(0, Number(cfg.socialV2?.wake?.preSleepWaitMs) || 300000);
-    const proactiveLine = '【积极性】不要习惯性潜水：群里有你能接的话题就主动参与，偶尔插一句别人的话题也很正常；只有确实没话可说、对方已明确结束、或长时间没人说话时才潜水。\n\n';
     const replyTiming = replyTimingV2(st);
-    const replyLine = `【首回复节奏】先处理已有消息，完整的问题及时回答。需要确认对方是否继续补充时，用 qq_wait_for_messages(purpose="reply", quietMs=${replyTiming.quietMs})；从最后来信计时，合批和读提示词的耗时也算，目前还差约 ${Math.ceil(replyTiming.remainingQuietMs / 1000)} 秒静默。已安静够久可直接回，工具也会立即返回并补上思考期间的新消息。只有明确没说完、你确实要等下文时，才用普通 messages 长等待。\n\n`;
-    const preSleepLine = `【沉睡前强制等待】这是决定潜水收尾时的步骤，不是首回复的前置条件。除非对方明确说“不聊了/晚安/下了/拜拜”等结束语，否则每次设置潜水/下一次唤醒前，必须先调用 qq_wait_for_messages(timeoutMs=${preSleepMs}) 完成一次沉睡前观察；回复前 purpose="reply" 的短静默不能代替这次完整观察。若 ${Math.round(preSleepMs / 60000)} 分钟内没人说话，返回 preSleepWaitSatisfied=true，可以设置下一次唤醒并沉睡；若期间有人发新消息，先查看返回的 newMessages——判断不需要你参与就可以直接沉睡，若你选择参与回复，则下次想睡时需要重新等待观察窗口。如果返回里带 preSleepWaitRemainingMs，就按剩余时间继续等待。\n\n`;
+    const replyLine = `【首回复】需要确认对方是否补充时，用 qq_wait_for_messages(purpose="reply", quietMs=${replyTiming.quietMs})；从最后来信计时，目前还差约 ${Math.ceil(replyTiming.remainingQuietMs / 1000)} 秒静默。规则见系统提示。\n\n`;
     const lastMsg = [...(Array.isArray(st.recentMessages) ? st.recentMessages : [])].reverse().find((m) => m && !m.isSelf);
     const lastAiMin = st.lastAiReplyAt ? Math.max(0, Math.round((Date.now() - Number(st.lastAiReplyAt)) / 60000)) : null;
     const statusBits = [`未读 ${(st.unread || []).length} 条`];
@@ -10609,7 +10608,7 @@ async function main() {
         bulkReplyLine = '【批量回复】未读超过 10 条：只回应最近 10 分钟内的消息，并且必须用 qq_reply 引用其中一条回复，不能单独发 qq_send_message；找不到可引用的消息就不要回。\n\n';
       }
     }
-    const base = roleLine + identityLine + tokenLine + initialPromptLine + antiAiLine + proactiveLine + stickerLine + replyLine + bulkReplyLine + statusLine + wakeLine + memoryLine + participationLine + preSleepLine + (key.startsWith('private:') ? '【私聊】看到消息直接回复即可；没有消息就结束本轮，不要等待、不要设潜水。\n\n' : '');
+    const base = roleLine + identityLine + tokenLine + initialPromptLine + stickerLine + replyLine + bulkReplyLine + statusLine + wakeLine + memoryLine + participationLine + (key.startsWith('private:') ? '【私聊】看到消息直接回复即可；没有消息就结束本轮，不要等待、不要设潜水。\n\n' : '');
     if (reason === 'bootstrap') {
       return `${base}【引导唤醒】你已接入 QQ 会话 ${key}。\n当前是仿真模式：你的文本输出不会自动发送到 QQ，所有发言必须通过工具完成。\n请先调用 qq_get_prompt 查看角色、推荐值、可用工具和状态；有待回应的消息先按首回复节奏处理，最后才用 qq_set_wake_config 设置你希望如何被唤醒。`;
     }
@@ -10779,6 +10778,8 @@ async function main() {
     let delay = Math.max(1000, Number(cfg.socialV2?.autoReplyCheckMs) || 30000);
     const recent = Array.isArray(st.recentMessages) ? st.recentMessages : [];
     const recentSelf = recent.filter((m) => m && m.isSelf && Date.now() - Number(m.time || 0) < 15000);
+    // 只有在“刚发过消息”时才检查下文；没有刚发出的消息就不安排，避免空转唤醒白烧上下文。
+    if (!recentSelf.length) return;
     const askedQuestion = recentSelf.some((m) => /[?？吗呢怎么有没有能不能]/.test(String(m.text || m.plain || '')));
     if (askedQuestion) delay = Math.round(delay * 1.5);
     if (recentSelf.length >= 3) delay = Math.round(delay * 1.3);
