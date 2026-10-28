@@ -71,6 +71,13 @@
               <option value="off" {{ 'selected' if row.proactive is sameas false else '' }}>关</option>
             </select>
           </label>
+          <label class="pv-field">自动黑话学习
+            <select class="pv-select" name="slangAutoLearn">
+              <option value="" {{ 'selected' if row.slangAutoLearn is none else '' }}>不覆盖</option>
+              <option value="on" {{ 'selected' if row.slangAutoLearn is sameas true else '' }}>开</option>
+              <option value="off" {{ 'selected' if row.slangAutoLearn is sameas false else '' }}>关</option>
+            </select>
+          </label>
           <label class="pv-field pv-num">合计·每分钟 <input class="pv-input" type="number" name="perMinute" min="1" value="{{ row.perMinute }}" placeholder="不限"></label>
           <label class="pv-field pv-num">合计·每小时 <input class="pv-input" type="number" name="perHour" min="1" value="{{ row.perHour }}" placeholder="不限"></label>
             <label class="pv-field pv-num">价格·命中(元/M) <input class="pv-input" type="number" step="0.01" name="priceCacheHit" value="{{ row.priceCacheHit }}" placeholder="0"></label>

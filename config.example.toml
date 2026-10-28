@@ -1,4 +1,4 @@
-﻿# qq-bridge 配置（TOML）
+# qq-bridge 配置（TOML）
 #
 # 说明：
 #   - 这是唯一权威配置文件；程序保存（如 token 自愈、控制台改设置）会重新序列化本文件，
@@ -252,8 +252,10 @@ days = ["mon", "tue", "wed", "thu", "fri"]
 start = "09:00"
 end = "12:00"
 replyProbability = 0.15
-reasoningEffort = "medium"
+reasoningEffort = "low"
 proactive = false
+# 自动黑话学习（可选）：false = 该时段不自动抽取/研究黑话；省略 = 跟随全局 slang.enabled
+slangAutoLearn = false
 sendMaxPerHour = 100
 
 # 分群限额（可选）：给名单内的群追加单独限制；未列出的群只受上面的合计限额约束。
@@ -265,8 +267,10 @@ days = ["mon", "tue", "wed", "thu", "fri"]
 start = "14:00"
 end = "18:00"
 replyProbability = 0.15
-reasoningEffort = "medium"
+reasoningEffort = "low"
 proactive = false
+# 自动黑话学习（可选）：false = 该时段不自动抽取/研究黑话；省略 = 跟随全局 slang.enabled
+slangAutoLearn = false
 sendMaxPerHour = 100
 
 [[periods]]

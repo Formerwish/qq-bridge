@@ -36,6 +36,7 @@ def _rows_from_config() -> list[dict]:
             "effort": item.get("reasoningEffort") or "",
             "model": item.get("model") or "",
             "proactive": item.get("proactive"),
+            "slangAutoLearn": item.get("slangAutoLearn"),
             "priceCacheHit": item.get("priceCacheHit", ""),
         "priceCacheMiss": item.get("priceCacheMiss", ""),
         "priceOutput": item.get("priceOutput", ""),
@@ -112,6 +113,7 @@ def save():
     per_minutes = request.form.getlist("perMinute")
     per_hours = request.form.getlist("perHour")
     proactives = request.form.getlist("proactive")  # 不覆盖 / on / off
+    slang_learns = request.form.getlist("slangAutoLearn")  # 不覆盖 / on / off
     group_specs = request.form.getlist("glSpec")
 
     periods = []
@@ -130,6 +132,7 @@ def save():
             "reasoningEffort": (efforts[idx] if idx < len(efforts) else "").strip() or None,
             "model": (models[idx] if idx < len(models) else "").strip() or None,
             "proactive": {"on": True, "off": False}.get((proactives[idx] if idx < len(proactives) else "").strip()),
+            "slangAutoLearn": {"on": True, "off": False}.get((slang_learns[idx] if idx < len(slang_learns) else "").strip()),
             "priceCacheHit": _num(prices_hit[idx] if idx < len(prices_hit) else ""),
         "priceCacheMiss": _num(prices_miss[idx] if idx < len(prices_miss) else ""),
         "priceOutput": _num(prices_out[idx] if idx < len(prices_out) else ""),

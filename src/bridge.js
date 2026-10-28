@@ -2266,8 +2266,15 @@ async function main() {
     });
   }
 
+  function autoSlangAllowed(now = Date.now()) {
+    if (cfg.slang?.enabled === false) return false;
+    const override = overridesAt(cfg.periods, new Date(now)).slangAutoLearn;
+    return override === undefined ? true : override === true;
+  }
+
   async function runSlangExtraction(key) {
     if (cfg.slang?.enabled === false) return;
+    if (!autoSlangAllowed()) return;
     if (!dshReady) return;
     const messages = slangWindows.get(key) ?? [];
     const min = Math.max(1, Number(cfg.slang?.extractMinMessages ?? 10));
@@ -2317,7 +2324,7 @@ async function main() {
       slangWindows.set(key, win.slice(messages.length));
       saveSlangStore();
       log(`黑话提取：${key} 新增 ${added} 条，更新 ${updated} 条`);
-      if (researchCandidates.length && cfg.slang?.autoResearch !== false) {
+      if (researchCandidates.length && cfg.slang?.autoResearch !== false && autoSlangAllowed()) {
         queueSlangTask(() => runSlangResearch(researchCandidates));
       }
     } catch (error) {
@@ -2407,6 +2414,7 @@ async function main() {
     log(`[slang] 定时研究已安排：${mode} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}${mode === 'weekly' ? ' ' + (weekdays[wantDay] || 'mon') : ''}，下次 ${next.toLocaleString('zh-CN')}`);
   }
   function runScheduledSlangResearch() {
+    if (!autoSlangAllowed()) { log('[slang] 当前时段已关闭自动黑话学习，跳过定时研究'); return; }
     if (cfg.slang?.enabled === false) { log('[slang] 定时研究跳过：黑话学习已关闭'); return; }
     const maxPerRun = Math.max(1, Math.min(200, Number(cfg.slang?.researchMaxPerRun) || 20));
     const candidates = (Array.isArray(slangEntries) ? slangEntries : [])
@@ -2425,6 +2433,7 @@ async function main() {
 
   function maybeQueueSlangExtraction(key) {
     if (cfg.slang?.enabled === false) return;
+    if (!autoSlangAllowed()) return;
     if (!dshReady) return;
     const cooldown = Number(cfg.slang?.extractCooldownMs ?? 300000);
     const last = slangExtractionCooldowns.get(key) ?? 0;
@@ -2440,6 +2449,7 @@ async function main() {
   // 只学当前消息自己的文字，不学引用原文）。聊天与仿真模式共用。
   function feedSlangWindow(key, sender, plainContent) {
     if (cfg.slang?.enabled === false) return;
+    if (!autoSlangAllowed()) return;
     if (!key || !plainContent || typeof plainContent !== 'string') return;
     const text = plainContent.trim();
     if (!text || text.startsWith('/')) return;
@@ -7507,7 +7517,7 @@ async function main() {
             }
             existing.updatedAt = new Date().toISOString();
             saveSlangStore();
-            if (cfg.slang?.autoResearch !== false) {
+            if (cfg.slang?.autoResearch !== false && autoSlangAllowed()) {
               const thresholds = Array.isArray(cfg.slang?.inferenceThresholds) ? cfg.slang.inferenceThresholds.map(Number).filter(Boolean) : [2, 4, 8];
               if (thresholds.includes(existing.count) && existing.count > (Number(existing.lastInferenceCount) || 0)) {
                 queueSlangTask(() => runSlangResearch([existing]));
@@ -7525,7 +7535,7 @@ async function main() {
           });
           slangEntries.push(entry);
           saveSlangStore();
-          if (cfg.slang?.autoResearch !== false) {
+          if (cfg.slang?.autoResearch !== false && autoSlangAllowed()) {
             queueSlangTask(() => runSlangResearch([entry]));
           }
           log(`[reserved2] AI 提交黑话候选「${content}」(${key})`);

@@ -99,6 +99,7 @@ export function normalizePeriods(raw) {
         reasoningEffort: REASONING_EFFORTS.includes(effort) ? effort : null,
         model: typeof item?.model === 'string' && item.model.trim() ? item.model.trim() : null,
         proactive: typeof item?.proactive === 'boolean' ? item.proactive : null,
+        slangAutoLearn: typeof item?.slangAutoLearn === 'boolean' ? item.slangAutoLearn : null,
         sendMaxPerMinute: Number.isFinite(Number(item?.sendMaxPerMinute)) && Number(item.sendMaxPerMinute) > 0
           ? Math.round(Number(item.sendMaxPerMinute)) : null,
         sendMaxPerHour: Number.isFinite(Number(item?.sendMaxPerHour)) && Number(item.sendMaxPerHour) > 0
@@ -145,7 +146,7 @@ export function overridesAt(periods, date = new Date()) {
   const period = periodAt(periods, date);
   if (!period) return {};
   const out = {};
-  for (const key of ['replyProbability', 'reasoningEffort', 'model', 'proactive', 'sendMaxPerMinute', 'sendMaxPerHour']) {
+  for (const key of ['replyProbability', 'reasoningEffort', 'model', 'proactive', 'slangAutoLearn', 'sendMaxPerMinute', 'sendMaxPerHour']) {
     if (period[key] !== null && period[key] !== undefined) out[key] = period[key];
   }
   if (Array.isArray(period.groupLimits) && period.groupLimits.length) out.groupLimits = period.groupLimits;
